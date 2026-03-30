@@ -80,6 +80,16 @@ npm run typecheck
 npm run build
 ```
 
+## Troubleshooting
+
+### Dependency Issues
+
+If you encounter an `ERESOLVE` error when running `npm install`, it may be due to a conflict between the Vite version and other dependencies. You can usually resolve this by running the installation with the `--legacy-peer-deps` flag:
+
+```bash
+npm install --legacy-peer-deps
+```
+
 ## Architecture snapshot
 
 ```text
@@ -157,4 +167,12 @@ When contributing, please keep the docs, README, and actual product behavior ali
 ## License
 
 GPL-2.0-or-later
+
+## Changelog
+
+### 1.2.1 - 2026-03-30
+- Fixed a bug that prevented the admin dashboard from loading due to missing JavaScript and CSS assets.
+- Regenerated the build files to ensure all assets are up-to-date.
+- Bumped the plugin version to 1.2.1.
+- Updated documentation.
 
