@@ -1,6 +1,21 @@
-﻿# Agency OS AI
+﻿<p align="center">
+  <a href="https://codefreex.com/agency-os-ai" target="_blank">
+    <img src="assets/branding/logo_agency_os_ai.svg" alt="Agency OS AI Logo" width="400">
+  </a>
+</p>
 
-AI-powered WordPress project manager with a branded client portal, employee workspace, support tickets, reports, dynamic tags, and OpenAI-powered workflow tools.
+<h1 align="center">Agency OS AI</h1>
+
+<p align="center">
+  AI-powered WordPress project manager with a branded client portal, employee workspace, support tickets, reports, dynamic tags, and OpenAI-powered workflow tools.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/wordpress/plugin/v/agency-os-ai.svg?style=flat-square" alt="WordPress Plugin Version">
+  <img src="https://img.shields.io/wordpress/plugin/dt/agency-os-ai.svg?style=flat-square" alt="WordPress Plugin Downloads">
+  <img src="https://img.shields.io/wordpress/plugin/rating/agency-os-ai.svg?style=flat-square" alt="WordPress Plugin Rating">
+  <img src="https://img.shields.io/github/license/codefreex/agency-os-ai?style=flat-square" alt="License">
+</p>
 
 ## Why Agency OS AI exists
 
@@ -44,15 +59,7 @@ Today, the free core already covers the operational baseline most teams need:
 
 ## Documentation
 
-Manual-upload HTML docs are included in [`docs/`](./docs):
-
-- [`docs/doc.html`](./docs/doc.html)
-- [`docs/userdoc.html`](./docs/userdoc.html)
-- [`docs/developer-doc.html`](./docs/developer-doc.html)
-- [`docs/addingfeatures.html`](./docs/addingfeatures.html)
-- [`docs/buildingaddon.html`](./docs/buildingaddon.html)
-
-These files are prepared for publishing at `themenfreex.com/docs/agency-os-ai/`.
+For comprehensive documentation, please visit [themefreex.com/doc/agency-os-ai](https://themefreex.com/doc/agency-os-ai).
 
 ## Development
 
@@ -106,7 +113,6 @@ agency-os-ai/
 │  ├─ admin/
 │  └─ portal/
 ├─ templates/
-├─ docs/
 └─ build/
 ```
 
