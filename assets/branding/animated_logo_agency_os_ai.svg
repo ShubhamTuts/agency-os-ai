@@ -1,0 +1,186 @@
+<svg width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      /* Orbital Animations */
+      @keyframes spin { 100% { transform: rotate(360deg); } }
+      @keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
+      
+      /* AI Engine Pulse and Float */
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.04); }
+      }
+      @keyframes float1 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes float2 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(8px); }
+      }
+      
+      /* Data Beam Flow */
+      @keyframes flow {
+        100% { stroke-dashoffset: -16; }
+      }
+      
+      /* Live Dashboard Task Fills */
+      @keyframes scale-x {
+        0%, 15% { transform: scaleX(0); opacity: 0; }
+        25%, 85% { transform: scaleX(1); opacity: 1; }
+        100% { transform: scaleX(1); opacity: 0; }
+      }
+      @keyframes pop {
+        0%, 20% { transform: scale(0); opacity: 0; }
+        30%, 85% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(1); opacity: 0; }
+      }
+      
+      /* Analytics Chart Draw */
+      @keyframes draw-chart {
+        0%, 20% { stroke-dashoffset: 200; opacity: 0; }
+        30% { opacity: 1; }
+        60%, 85% { stroke-dashoffset: 0; opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+      @keyframes pop-point {
+        0%, 55% { transform: scale(0); opacity: 0; }
+        65%, 85% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(1); opacity: 0; }
+      }
+
+      /* Apply Classes */
+      .spin-fast { transform-origin: 240px 240px; animation: spin 8s linear infinite; }
+      .spin-slow-reverse { transform-origin: 240px 240px; animation: spin-reverse 24s linear infinite; }
+      
+      .ai-core { transform-origin: 140px 240px; animation: pulse 3s ease-in-out infinite; }
+      .particle-1 { animation: float1 3s ease-in-out infinite; }
+      .particle-2 { animation: float2 4s ease-in-out infinite; }
+      
+      .beam-flow { animation: flow 0.5s linear infinite; }
+      
+      .task-bar { animation: scale-x 7s infinite ease-out; }
+      .task-bar-1 { transform-origin: 270px 188px; animation-delay: 0s; }
+      .task-bar-2 { transform-origin: 270px 224px; animation-delay: 0.8s; }
+      .task-bar-3 { transform-origin: 270px 260px; animation-delay: 1.6s; }
+      
+      .check-mark { animation: pop 7s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+      .check-1 { transform-origin: 366px 188px; animation-delay: 0s; }
+      .check-2 { transform-origin: 346px 224px; animation-delay: 0.8s; }
+      .check-3 { transform-origin: 386px 260px; animation-delay: 1.6s; }
+      
+      .chart-draw { stroke-dasharray: 200; stroke-dashoffset: 200; animation: draw-chart 7s infinite ease-out; }
+      .chart-point { transform-origin: 430px 325px; animation: pop-point 7s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    </style>
+
+    <!-- AI Magic Gradients -->
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" />
+      <stop offset="50%" stop-color="#C026D3" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+
+    <linearGradient id="aiGradGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- Drop Shadow for OS Cards -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0F172A" flood-opacity="0.1" />
+    </filter>
+
+    <!-- Glow Effect for AI Spark -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- 1. Outer System / OS Network Ring -->
+  <g class="spin-slow-reverse">
+    <!-- Base dashed ring -->
+    <circle cx="240" cy="240" r="220" stroke="#E2E8F0" stroke-width="4" stroke-dasharray="16 16" />
+    <!-- Outer Nodes -->
+    <circle cx="460" cy="240" r="12" fill="#06B6D4" />
+    <circle cx="240" cy="20" r="12" fill="#7C3AED" />
+    <circle cx="240" cy="460" r="12" fill="#06B6D4" />
+  </g>
+
+  <!-- Active AI processing arc -->
+  <g class="spin-fast">
+    <path d="M 240 20 A 220 220 0 0 1 460 240 A 220 220 0 0 1 240 460" stroke="url(#aiGrad)" stroke-width="8" stroke-linecap="round" fill="none" />
+  </g>
+
+  <!-- 2. Main OS Dashboard Card -->
+  <g filter="url(#shadow)">
+    <!-- Card Base -->
+    <rect x="50" y="100" width="380" height="280" rx="24" fill="#FFFFFF" />
+
+    <!-- Header Background -->
+    <path d="M 50 124 C 50 110.745 60.745 100 74 100 H 406 C 419.255 100 430 110.745 430 124 V 148 H 50 V 124 Z" fill="#F8FAFC" />
+
+    <!-- Header Line -->
+    <line x1="50" y1="148" x2="430" y2="148" stroke="#0F172A" stroke-width="6" />
+
+    <!-- Window Controls -->
+    <circle cx="84" cy="124" r="6" fill="#E2E8F0" />
+    <circle cx="108" cy="124" r="6" fill="#E2E8F0" />
+    <circle cx="132" cy="124" r="6" fill="#E2E8F0" />
+
+    <!-- Card Outer Border -->
+    <rect x="50" y="100" width="380" height="280" rx="24" fill="none" stroke="#0F172A" stroke-width="6" />
+  </g>
+
+  <!-- 3. The AI Engine (Left Side) -->
+  <g class="ai-core">
+    <!-- Huge Glowing Background for Spark -->
+    <path d="M 140 190 Q 140 240 90 240 Q 140 240 140 290 Q 140 240 190 240 Q 140 240 140 190 Z" fill="url(#aiGradGlow)" filter="url(#glow)" />
+    <!-- Core AI Spark -->
+    <path d="M 140 190 Q 140 240 90 240 Q 140 240 140 290 Q 140 240 190 240 Q 140 240 140 190 Z" fill="url(#aiGrad)" />
+  </g>
+
+  <!-- Floating Magic Particles -->
+  <path class="particle-1" d="M 195 180 Q 195 190 185 190 Q 195 190 195 200 Q 195 190 205 190 Q 195 190 195 180 Z" fill="#C026D3" />
+  <path class="particle-2" d="M 90 280 Q 90 290 80 290 Q 90 290 90 300 Q 90 290 100 290 Q 90 290 90 280 Z" fill="#06B6D4" />
+
+  <!-- 4. Data Transfer / Generation Beam -->
+  <path class="beam-flow" d="M 200 240 H 240" stroke="url(#aiGrad)" stroke-width="6" stroke-dasharray="8 8" stroke-linecap="round" />
+  <path d="M 235 230 L 255 240 L 235 250 Z" fill="#06B6D4" />
+
+  <!-- 5. Auto-Generated Project Tasks (Right Side) -->
+  <!-- Task 1 -->
+  <rect x="270" y="180" width="120" height="16" rx="8" fill="#F1F5F9" />
+  <rect class="task-bar task-bar-1" x="270" y="180" width="80" height="16" rx="8" fill="url(#aiGrad)" />
+  <g class="check-mark check-1">
+    <circle cx="366" cy="188" r="10" fill="#10B981" />
+    <path d="M 362 188 L 365 191 L 370 185" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- Task 2 -->
+  <rect x="270" y="216" width="90" height="16" rx="8" fill="#F1F5F9" />
+  <rect class="task-bar task-bar-2" x="270" y="216" width="60" height="16" rx="8" fill="url(#aiGrad)" opacity="0.8" />
+  <g class="check-mark check-2">
+    <circle cx="346" cy="224" r="10" fill="#10B981" />
+    <path d="M 342 224 L 345 227 L 350 221" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- Task 3 -->
+  <rect x="270" y="252" width="130" height="16" rx="8" fill="#F1F5F9" />
+  <rect class="task-bar task-bar-3" x="270" y="252" width="100" height="16" rx="8" fill="url(#aiGrad)" opacity="0.6" />
+  <g class="check-mark check-3">
+    <circle cx="386" cy="260" r="10" fill="#10B981" />
+    <path d="M 382 260 L 385 263 L 390 257" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- 6. Floating Analytics Widget (Overlapping bottom right to show OS capability) -->
+  <g filter="url(#shadow)">
+    <rect x="290" y="300" width="160" height="100" rx="16" fill="#FFFFFF" stroke="#0F172A" stroke-width="6" />
+    <!-- Inner Grid Line -->
+    <line x1="310" y1="370" x2="430" y2="370" stroke="#E2E8F0" stroke-width="4" stroke-linecap="round" />
+    <line x1="310" y1="340" x2="430" y2="340" stroke="#E2E8F0" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 4"/>
+    <!-- Chart Line -->
+    <path class="chart-draw" d="M 310 370 L 340 330 L 370 345 L 400 315 L 430 325" stroke="url(#aiGrad)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <circle class="chart-point" cx="430" cy="325" r="6" fill="#06B6D4" />
+  </g>
+</svg>

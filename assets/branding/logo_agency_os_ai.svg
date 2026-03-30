@@ -1,0 +1,110 @@
+<svg width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Card Drop Shadow -->
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0F172A" flood-opacity="0.1" />
+    </filter>
+
+    <!-- Glowing Effect for the Main Star -->
+    <filter id="sparkGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#C026D3" flood-opacity="0.4" />
+    </filter>
+
+    <!-- Gradient for Outer Solid Arc -->
+    <linearGradient id="arcGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06B6D4" />
+      <stop offset="50%" stop-color="#9333EA" />
+      <stop offset="100%" stop-color="#C026D3" />
+    </linearGradient>
+
+    <!-- Gradient for Main Star -->
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9333EA" />
+      <stop offset="60%" stop-color="#D946EF" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+
+    <!-- Gradient for Task Pills -->
+    <linearGradient id="pillGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#A855F7" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Outer Ring System -->
+  <!-- Dashed Background Circle -->
+  <circle cx="240" cy="240" r="200" stroke="#E2E8F0" stroke-width="4" stroke-dasharray="10 14" fill="none" />
+  
+  <!-- Solid Gradient Arc (Bottom-Left to Mid-Right) -->
+  <path d="M 66 339 A 200 200 0 1 1 430 178" stroke="url(#arcGrad)" stroke-width="6" stroke-linecap="round" fill="none" />
+
+  <!-- Ring Nodes -->
+  <!-- Bottom Left Cyan Node -->
+  <circle cx="66" cy="339" r="8" fill="#06B6D4" />
+  <!-- Top Left Cyan Node -->
+  <circle cx="140" cy="67" r="6" fill="#06B6D4" />
+  <!-- Bottom Right Purple Node -->
+  <circle cx="360" cy="400" r="10" fill="#A855F7" />
+
+  <!-- 2. Main Dashboard Card -->
+  <g filter="url(#cardShadow)">
+    <!-- Main Body Background -->
+    <rect x="50" y="100" width="380" height="260" rx="20" fill="#FFFFFF" />
+    
+    <!-- Top Header Line -->
+    <line x1="50" y1="148" x2="430" y2="148" stroke="#111827" stroke-width="6" />
+    
+    <!-- Header Window Controls -->
+    <circle cx="85" cy="124" r="5" fill="#E5E7EB" />
+    <circle cx="105" cy="124" r="5" fill="#E5E7EB" />
+    <circle cx="125" cy="124" r="5" fill="#E5E7EB" />
+    
+    <!-- Main Card Dark Outline -->
+    <rect x="50" y="100" width="380" height="260" rx="20" stroke="#111827" stroke-width="6" fill="none" />
+  </g>
+
+  <!-- 3. Left Side: AI Sparks -->
+  <!-- Main 4-Pointed Star -->
+  <path d="M 150 170 Q 150 250 70 250 Q 150 250 150 330 Q 150 250 230 250 Q 150 250 150 170 Z" fill="url(#starGrad)" filter="url(#sparkGlow)" />
+  
+  <!-- Small Pink Star (Top Right of Main Star) -->
+  <path d="M 230 170 Q 230 180 220 180 Q 230 180 230 190 Q 230 180 240 180 Q 230 180 230 170 Z" fill="#D946EF" />
+  
+  <!-- Small Cyan Star (Bottom Left of Main Star) -->
+  <path d="M 100 302 Q 100 310 92 310 Q 100 310 100 318 Q 100 310 108 310 Q 100 310 100 302 Z" fill="#06B6D4" />
+
+  <!-- 4. Center: Triangle/Arrow Indicator -->
+  <path d="M 245 240 L 260 250 L 245 260 Z" fill="#06B6D4" />
+
+  <!-- 5. Right Side: Automated Task Pills -->
+  <!-- Task Pill 1 (Gradient + Check) -->
+  <rect x="290" y="185" width="80" height="16" rx="8" fill="url(#pillGrad)" />
+  <circle cx="385" cy="193" r="10" fill="#10B981" />
+  <path d="M 381 193 L 384 196 L 389 190" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Task Pill 2 (Gradient + Check) -->
+  <rect x="290" y="225" width="60" height="16" rx="8" fill="url(#pillGrad)" />
+  <circle cx="365" cy="233" r="10" fill="#10B981" />
+  <path d="M 361 233 L 364 236 L 369 230" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Task Pill 3 (Empty / Loading) -->
+  <rect x="290" y="265" width="90" height="16" rx="8" fill="#F1F5F9" />
+
+  <!-- 6. Floating Analytics Widget (Bottom Right) -->
+  <g filter="url(#cardShadow)">
+    <!-- Widget Base Background -->
+    <rect x="300" y="290" width="140" height="90" rx="12" fill="#FFFFFF" />
+    
+    <!-- Background Dashed Line -->
+    <line x1="320" y1="335" x2="420" y2="335" stroke="#E2E8F0" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round" />
+    
+    <!-- Background Solid Base Line -->
+    <line x1="320" y1="365" x2="420" y2="365" stroke="#E2E8F0" stroke-width="4" stroke-linecap="round" />
+    
+    <!-- Upward Trend Chart Line -->
+    <path d="M 320 365 L 350 310 L 375 330 L 415 295" stroke="#C026D3" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <!-- Widget Dark Outline -->
+    <rect x="300" y="290" width="140" height="90" rx="12" stroke="#111827" stroke-width="6" fill="none" />
+  </g>
+</svg>

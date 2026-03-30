@@ -1,0 +1,14 @@
+{
+    "changelog": {
+        "1.0.0": {
+            "*": [
+                "Initial release"
+            ]
+        }
+    },
+    "last translator": "Codefreex",
+    "team": "https://codefreex.com",
+    "version": "1.0.0",
+    "domains": ["agency-os-ai"],
+    "locale_name": "Agency OS AI"
+}
