@@ -16,6 +16,7 @@ class AOSAI_Plugin {
         $this->define_frontend_hooks();
         $this->define_api_hooks();
         $this->define_notification_hooks();
+        $this->define_smtp_hooks();
     }
 
     private function load_dependencies() {
@@ -32,6 +33,8 @@ class AOSAI_Plugin {
         require_once AOSAI_PLUGIN_DIR . 'includes/services/class-aosai-permission-service.php';
         require_once AOSAI_PLUGIN_DIR . 'includes/services/class-aosai-file-service.php';
         require_once AOSAI_PLUGIN_DIR . 'includes/services/class-aosai-portal-service.php';
+        require_once AOSAI_PLUGIN_DIR . 'includes/services/class-aosai-smtp-service.php';
+        require_once AOSAI_PLUGIN_DIR . 'includes/services/class-aosai-webhook-service.php';
 
         require_once AOSAI_PLUGIN_DIR . 'includes/admin/class-aosai-admin.php';
         require_once AOSAI_PLUGIN_DIR . 'includes/admin/class-aosai-admin-notices.php';
@@ -41,7 +44,7 @@ class AOSAI_Plugin {
         $controllers = array(
             'projects', 'tasks', 'task-lists', 'milestones', 'messages',
             'comments', 'files', 'activities', 'ai', 'settings', 'users', 'reports', 'profile',
-            'portal', 'tickets', 'departments', 'tags',
+            'portal', 'tickets', 'departments', 'tags', 'webhooks', 'inbound',
         );
         foreach ( $controllers as $ctrl ) {
             require_once AOSAI_PLUGIN_DIR . "includes/api/class-aosai-rest-{$ctrl}.php";
@@ -66,6 +69,7 @@ class AOSAI_Plugin {
         $this->loader->add_action( 'init', $frontend, 'maybe_serve_virtual_assets' );
         $this->loader->add_action( 'admin_init', $frontend, 'maybe_redirect_portal_users' );
         $this->loader->add_action( 'wp_head', $frontend, 'print_pwa_meta' );
+        $this->loader->add_action( 'wp_head', $frontend, 'output_modulepreload_hints' );
         $this->loader->add_filter( 'show_admin_bar', $frontend, 'maybe_hide_admin_bar' );
     }
 
@@ -92,6 +96,8 @@ class AOSAI_Plugin {
             new AOSAI_REST_Tickets(),
             new AOSAI_REST_Departments(),
             new AOSAI_REST_Tags(),
+            new AOSAI_REST_Webhooks(),
+            new AOSAI_REST_Inbound(),
         );
 
         foreach ( $controllers as $controller ) {
@@ -108,6 +114,11 @@ class AOSAI_Plugin {
         $this->loader->add_action( 'aosai_comment_created', $notifications, 'on_comment_created', 10, 3 );
         $this->loader->add_action( 'aosai_milestone_completed', $notifications, 'on_milestone_completed', 10, 2 );
         $this->loader->add_action( 'aosai_message_created', $notifications, 'on_message_created', 10, 2 );
+    }
+
+    private function define_smtp_hooks() {
+        $smtp = AOSAI_SMTP_Service::get_instance();
+        $this->loader->add_action( 'phpmailer_init', $smtp, 'configure_phpmailer' );
     }
 
     public function run() {

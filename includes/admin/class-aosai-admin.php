@@ -60,6 +60,7 @@ class AOSAI_Admin {
             );
         }
 
+        add_action( 'admin_head', array( $this, 'output_admin_modulepreload' ) );
         add_filter( 'script_loader_tag', array( $this, 'add_module_type' ), 10, 3 );
         add_action( 'print_footer_scripts', array( $this, 'remove_module_filter' ) );
 
@@ -111,6 +112,27 @@ class AOSAI_Admin {
 
     public function remove_module_filter() {
         remove_filter( 'script_loader_tag', array( $this, 'add_module_type' ) );
+    }
+
+    public function output_admin_modulepreload(): void {
+        $manifest = aosai_get_asset_manifest();
+        if ( empty( $manifest ) ) {
+            return;
+        }
+
+        foreach ( $manifest as $entry ) {
+            if ( empty( $entry['file'] ) ) {
+                continue;
+            }
+
+            $file = ltrim( (string) $entry['file'], '/' );
+            if ( substr( $file, -3 ) !== '.js' ) {
+                continue;
+            }
+
+            $url = AOSAI_PLUGIN_URL . 'build/' . $file;
+            echo '<link rel="modulepreload" href="' . esc_url( $url ) . '">' . "\n";
+        }
     }
 
     public function render_admin_page() {

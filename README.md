@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <a href="https://codefreex.com/agency-os-ai" target="_blank">
     <img src="assets/branding/logo_agency_os_ai.svg" alt="Agency OS AI Logo" width="400">
   </a>
@@ -7,7 +7,7 @@
 <h1 align="center">Agency OS AI</h1>
 
 <p align="center">
-  AI-powered WordPress project manager with a branded client portal, employee workspace, support tickets, reports, dynamic tags, and OpenAI-powered workflow tools.
+  AI-powered WordPress project manager with a branded client portal, employee workspace, support tickets, built-in SMTP, inbound and outbound webhooks, and OpenAI-powered workflow tools.
 </p>
 
 <p align="center">
@@ -21,45 +21,61 @@
 
 Agencies should not need five separate SaaS tools just to manage delivery, support, files, client communication, and internal coordination.
 
-Agency OS AI brings those core workflows into WordPress with a modern React admin, a frontend portal for clients and employees, and a free-core architecture that is honest about what ships today while staying ready for future add-ons.
+Agency OS AI brings those core workflows into WordPress with a modern React admin, a branded frontend portal for clients and employees, reliable built-in SMTP email delivery, inbound and outbound webhook connectivity, and a free-core architecture that is honest about what ships today while staying ready for future add-ons.
 
 ## What is included in free core
 
+**Project and task management**
+
 - Projects, task lists, tasks, milestones, messages, files, reports, profile, team, and settings
-- Branded React admin workspace with the updated header logo and animated preloaders
+- Branded React admin workspace with updated header logo and animated preloaders
+- Team performance visibility in the reports screen
+
+**Branded client portal**
+
 - Frontend portal shortcode: `[agency_os_ai_portal]`
 - Frontend login shortcode: `[agency_os_ai_login]`
-- Client and employee roles with admin-bar hiding and frontend-first redirects
+- Client role (`aosai_client`) and employee role (`aosai_employee`)
+- Admin bar hiding and frontend-first redirects for portal users
 - One-click page creation for login, portal, and support pages
+- PWA basics for an installable frontend portal experience
+
+**Help desk and support tickets**
+
 - Support tickets, departments, ticket notes, and reusable dynamic tags
-- Company branding controls for colors, company details, sender identity, and footer credit behavior
-- Privacy policy and terms URL settings for branded frontend trust links
-- OpenAI connection settings, AI test flow, and AI routing baseline for ticket departments
-- Team performance visibility in reports
-- PWA basics for the frontend portal
-- Extension-ready email hooks for future SMTP, IMAP, or provider-specific delivery layers
+- Department default assignee for automatic ticket routing on new submissions
+- AI-assisted department routing baseline when an OpenAI key is present
 
-## Product positioning
+**Email and connectivity (new in 1.3.0)**
 
-Agency OS AI is building toward a serious open source WordPress project manager and AI agency management platform.
+- Built-in SMTP configuration: host, port, authentication, encryption, all from the Settings screen
+- Branded email notifications with customizable sender name, sender address, and footer text
+- Inbound email-to-ticket webhook endpoint (`POST /aosai/v1/inbound/email`) with token authentication for auto-creating tickets from forwarded emails
+- Outbound webhook integrations with HMAC signature verification firing on `ticket.created`, `task.created`, `project.created`, and other key events
 
-Today, the free core already covers the operational baseline most teams need:
+**AI tools**
 
-- task manager workflows inside WordPress
-- a clean client portal experience
-- employee dashboard access without wp-admin clutter
-- support tickets and communication history in one place
-- OpenAI-assisted agency operations
+- OpenAI integration using your own API key
+- AI playground for direct workspace queries
+- AI-assisted ticket department routing
+
+**Company branding**
+
+- Company name, logo URL, colors, and portal welcome copy
+- Privacy policy and terms URL fields for branded frontend trust links
+- Extension-ready email hooks for future provider-specific delivery layers
 
 ## Shortcodes
 
-- `[agency_os_ai_portal]`
-- `[agency_os_ai_portal view="tickets"]`
-- `[agency_os_ai_login]`
+| Shortcode | Purpose |
+|---|---|
+| `[agency_os_ai_portal]` | Full frontend workspace |
+| `[agency_os_ai_portal view="tickets"]` | Ticket-focused portal view |
+| `[agency_os_ai_login]` | Branded login screen |
 
 ## Documentation
 
-For comprehensive documentation, please visit [themefreex.com/doc/agency-os-ai](https://themefreex.com/doc/agency-os-ai).
+For comprehensive documentation, visit [themefreex.com/doc/agency-os-ai](https://themefreex.com/doc/agency-os-ai).
 
 ## Development
 
@@ -75,26 +91,22 @@ For comprehensive documentation, please visit [themefreex.com/doc/agency-os-ai](
 npm install
 ```
 
+If you hit an `ERESOLVE` conflict, use:
+
+```bash
+npm install --legacy-peer-deps
+```
+
 ### Typecheck
 
 ```bash
 npm run typecheck
 ```
 
-### Build the admin + portal bundles
+### Build the admin and portal bundles
 
 ```bash
 npm run build
-```
-
-## Troubleshooting
-
-### Dependency Issues
-
-If you encounter an `ERESOLVE` error when running `npm install`, it may be due to a conflict between the Vite version and other dependencies. You can usually resolve this by running the installation with the `--legacy-peer-deps` flag:
-
-```bash
-npm install --legacy-peer-deps
 ```
 
 ## Architecture snapshot
@@ -120,9 +132,9 @@ agency-os-ai/
 
 The free plugin should feel complete and valuable on its own.
 
-If you build add-ons later, the best path is to extend the free core through hooks, routes, isolated settings, and new asset bundles instead of replacing the portal, settings, or branding systems already in place.
+If you build add-ons, the best path is to extend the free core through hooks, REST routes, isolated settings, and new asset bundles instead of replacing the portal, settings, or branding systems already in place.
 
-Useful extension surfaces already available in free core include:
+Useful extension surfaces available in free core:
 
 ```php
 apply_filters( 'aosai_admin_js_data', $data );
@@ -137,36 +149,37 @@ do_action( 'aosai_after_send_email', $result, $payload );
 
 Agency OS AI is a product of [Themefreex](https://themefreex.com) by [Codefreex](https://codefreex.com).
 
-The live free-core product now includes:
+The free core includes:
 
-- product branding in the portal login and workspace footer
-- policy URL settings for privacy and terms links
-- documentation pages with branded product footers
+- Product branding in the portal login and workspace footer
+- Policy URL settings for privacy and terms links
+- Documentation pages with branded product footers
 
 ## Coming soon roadmap
 
 These are planned add-on or future expansion areas, not features currently shipped in the free core:
 
-- advanced Kanban and timeline views
-- Gantt chart planning
-- calendar and workload planning
-- deeper ticket automations and SLA workflows
-- SMTP, IMAP, Gmail, and provider-specific mail transports
-- time tracking and billing overlays
-- invoicing and payment workflows
-- advanced exports and executive reporting
-- multi-provider AI gateways such as Claude, DeepSeek, Gemini, and other specialist models
-- richer client success and account-management modules
+- Kanban board views for visual task management
+- Gantt chart planning for project timelines
+- Calendar and workload planning across team members
+- Time tracking and billing overlays
+- Automated invoicing and payment workflows
+- Stripe payment gateway integration
+- Multi-provider AI: Claude (Anthropic), Gemini (Google), DeepSeek, xAI Grok, OpenRouter
+- Slack team notifications
+- GitHub and Bitbucket development pipeline integrations
+- BuddyPress and WooCommerce integrations
+- Advanced data exports and executive reporting dashboards
 
 ## Contributing
 
 Contributions are welcome, especially in these areas:
 
-- stability improvements across real agency workflows
-- reporting and visualization polish
-- portal accessibility and mobile UX
-- documentation quality
-- extension patterns for future add-ons
+- Stability improvements across real agency workflows
+- Reporting and visualization polish
+- Portal accessibility and mobile UX
+- Documentation quality
+- Extension patterns for future add-ons
 
 When contributing, please keep the docs, README, and actual product behavior aligned.
 
@@ -175,6 +188,15 @@ When contributing, please keep the docs, README, and actual product behavior ali
 GPL-2.0-or-later
 
 ## Changelog
+
+### 1.3.0 - 2026-03-31
+- Added built-in SMTP configuration for reliable email delivery from the Settings screen (host, port, auth, encryption)
+- Added inbound email-to-ticket webhook endpoint (`POST /aosai/v1/inbound/email`) with token authentication for auto-creating tickets from forwarded emails
+- Added outbound webhook integrations with HMAC signature verification for `ticket.created`, `task.created`, `project.created`, and other key events
+- Added department default assignee for automatic ticket assignment on new submissions
+- Fixed 404 errors on dynamically-imported JS assets caused by incorrect Vite base path; rebuilt with correct relative base
+- Fixed admin bar display on portal pages for administrator roles
+- Bumped tested-up-to to 6.9
 
 ### 1.2.2 - 2026-03-31
 - Fixed critical black-screen bug: Vite was building chunk URLs as absolute paths (`/assets/...`) causing 404s on any WordPress install. Set `base: './'` so dynamic imports resolve relative to the entry script via `import.meta.url`.
@@ -186,4 +208,3 @@ GPL-2.0-or-later
 - Regenerated the build files to ensure all assets are up-to-date.
 - Bumped the plugin version to 1.2.1.
 - Updated documentation.
-

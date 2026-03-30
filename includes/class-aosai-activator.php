@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class AOSAI_Activator {
-    public const DB_VERSION = '1.2.0';
+    public const DB_VERSION = '1.3.0';
 
     public static function activate() {
         self::install_schema();
@@ -273,6 +273,7 @@ CREATE TABLE {$prefix}aosai_departments (
     color VARCHAR(7) NOT NULL DEFAULT '#0f766e',
     keywords TEXT NULL,
     is_default TINYINT(1) NOT NULL DEFAULT 0,
+    default_assignee_id BIGINT(20) UNSIGNED NULL DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -324,6 +325,20 @@ CREATE TABLE {$prefix}aosai_tag_relations (
     UNIQUE KEY idx_tag_object (tag_id, object_type, object_id),
     KEY idx_object_lookup (object_type, object_id)
 ) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_webhooks (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(190) NOT NULL DEFAULT '',
+    url TEXT NOT NULL,
+    events VARCHAR(255) NOT NULL DEFAULT 'all',
+    secret VARCHAR(64) NOT NULL DEFAULT '',
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    trigger_count INT(11) NOT NULL DEFAULT 0,
+    last_triggered_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_active (is_active)
+) {$charset_collate};
 ";
 
         dbDelta( $sql );
@@ -370,6 +385,15 @@ CREATE TABLE {$prefix}aosai_tag_relations (
             'aosai_ticket_ai_routing'          => 'yes',
             'aosai_ticket_default_priority'    => 'medium',
             'aosai_portal_dashboard_layout'    => 'split',
+            'aosai_smtp_enabled'           => 'no',
+            'aosai_smtp_host'              => '',
+            'aosai_smtp_port'              => 587,
+            'aosai_smtp_username'          => '',
+            'aosai_smtp_password'          => '',
+            'aosai_smtp_encryption'        => 'tls',
+            'aosai_smtp_auth'              => 'yes',
+            'aosai_inbound_email_token'    => wp_generate_password( 32, false ),
+            'aosai_inbound_ai_routing'     => 'yes',
         );
 
         foreach ( $defaults as $key => $value ) {

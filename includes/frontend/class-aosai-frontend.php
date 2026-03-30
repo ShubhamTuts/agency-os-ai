@@ -64,6 +64,11 @@ class AOSAI_Frontend {
             return false;
         }
 
+        // Also hide admin bar for all users (including admins) on portal pages.
+        if ( $this->is_portal_page_request() ) {
+            return false;
+        }
+
         return $show;
     }
 
@@ -184,6 +189,28 @@ class AOSAI_Frontend {
 
     public function remove_module_filter() {
         remove_filter( 'script_loader_tag', array( $this, 'add_module_type' ) );
+    }
+
+    public function output_modulepreload_hints(): void {
+        $manifest = aosai_get_asset_manifest();
+        if ( empty( $manifest ) ) {
+            return;
+        }
+
+        foreach ( $manifest as $entry ) {
+            if ( empty( $entry['file'] ) ) {
+                continue;
+            }
+
+            $file = ltrim( (string) $entry['file'], '/' );
+            // Only preload JS files (not CSS)
+            if ( substr( $file, -3 ) !== '.js' ) {
+                continue;
+            }
+
+            $url = AOSAI_PLUGIN_URL . 'build/' . $file;
+            echo '<link rel="modulepreload" href="' . esc_url( $url ) . '">' . "\n";
+        }
     }
 
     private function get_portal_script_data( string $initial_view ): array {
