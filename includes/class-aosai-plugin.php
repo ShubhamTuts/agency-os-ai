@@ -50,7 +50,7 @@ class AOSAI_Plugin {
 
     private function set_locale() {
         $i18n = new AOSAI_i18n();
-        $this->loader->add_action( 'plugins_loaded', $i18n, 'load_plugin_textdomain' );
+        $this->loader->add_action( 'init', $i18n, 'load_plugin_textdomain' );
     }
 
     private function define_admin_hooks() {

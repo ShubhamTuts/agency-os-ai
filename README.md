@@ -176,6 +176,11 @@ GPL-2.0-or-later
 
 ## Changelog
 
+### 1.2.2 - 2026-03-31
+- Fixed critical black-screen bug: Vite was building chunk URLs as absolute paths (`/assets/...`) causing 404s on any WordPress install. Set `base: './'` so dynamic imports resolve relative to the entry script via `import.meta.url`.
+- Fixed translation textdomain loading too early: `load_plugin_textdomain` was registered on `plugins_loaded` inside code that itself runs on `plugins_loaded` (already fired), so translations never loaded. Moved hook to `init`.
+- Updated tested-up-to to 6.9.
+
 ### 1.2.1 - 2026-03-30
 - Fixed a bug that prevented the admin dashboard from loading due to missing JavaScript and CSS assets.
 - Regenerated the build files to ensure all assets are up-to-date.

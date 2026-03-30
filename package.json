@@ -1,6 +1,6 @@
 {
   "name": "agency-os-ai",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "scripts": {
     "dev": "vite --config vite.config.ts",

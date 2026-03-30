@@ -2,9 +2,9 @@
 Contributors: codefreex
 Tags: project management, task management, client portal, help desk, ai assistant
 Requires at least: 6.4
-Tested up to: 7.0
+Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.0
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -123,6 +123,12 @@ Service provider:
 - Terms: https://openai.com/policies/business-terms/
 - Privacy Policy: https://openai.com/policies/privacy-policy/
 == Changelog ==
+
+= 1.2.2 =
+
+- Fixed critical black-screen bug caused by Vite building chunk URLs as absolute paths (/assets/...) instead of plugin-relative paths; set base: './' so dynamic imports resolve correctly via import.meta.url
+- Fixed translation textdomain loading too early; moved load_plugin_textdomain from plugins_loaded (already fired) to init hook
+- Updated tested-up-to to 6.9
 
 = 1.2.0 =
 
