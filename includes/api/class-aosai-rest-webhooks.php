@@ -5,77 +5,80 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AOSAI_REST_Webhooks extends WP_REST_Controller {
 
-    protected $namespace = 'agency-os-ai/v1';
+    protected $namespace = 'aosai/v1';
+    protected $legacy_namespace = 'agency-os-ai/v1';
     protected $rest_base = 'webhooks';
 
     public function register_routes(): void {
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base,
-            array(
+        foreach ( array_unique( array( $this->namespace, $this->legacy_namespace ) ) as $namespace ) {
+            register_rest_route(
+                $namespace,
+                '/' . $this->rest_base,
                 array(
-                    'methods'             => WP_REST_Server::READABLE,
-                    'callback'            => array( $this, 'get_items' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
+                    array(
+                        'methods'             => WP_REST_Server::READABLE,
+                        'callback'            => array( $this, 'get_items' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                    ),
+                    array(
+                        'methods'             => WP_REST_Server::CREATABLE,
+                        'callback'            => array( $this, 'create_item' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                        'args'                => $this->get_create_args(),
+                    ),
                 ),
-                array(
-                    'methods'             => WP_REST_Server::CREATABLE,
-                    'callback'            => array( $this, 'create_item' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
-                    'args'                => $this->get_create_args(),
-                ),
-            )
-        );
+            );
 
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/(?P<id>\d+)',
-            array(
+            register_rest_route(
+                $namespace,
+                '/' . $this->rest_base . '/(?P<id>\d+)',
                 array(
-                    'methods'             => WP_REST_Server::READABLE,
-                    'callback'            => array( $this, 'get_item' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
-                    'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    array(
+                        'methods'             => WP_REST_Server::READABLE,
+                        'callback'            => array( $this, 'get_item' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                        'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    ),
+                    array(
+                        'methods'             => WP_REST_Server::EDITABLE,
+                        'callback'            => array( $this, 'update_item' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                        'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    ),
+                    array(
+                        'methods'             => WP_REST_Server::DELETABLE,
+                        'callback'            => array( $this, 'delete_item' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                        'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    ),
                 ),
-                array(
-                    'methods'             => WP_REST_Server::EDITABLE,
-                    'callback'            => array( $this, 'update_item' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
-                    'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
-                ),
-                array(
-                    'methods'             => WP_REST_Server::DELETABLE,
-                    'callback'            => array( $this, 'delete_item' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
-                    'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
-                ),
-            )
-        );
+            );
 
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/(?P<id>\d+)/test',
-            array(
+            register_rest_route(
+                $namespace,
+                '/' . $this->rest_base . '/(?P<id>\d+)/test',
                 array(
-                    'methods'             => WP_REST_Server::CREATABLE,
-                    'callback'            => array( $this, 'test_webhook' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
-                    'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    array(
+                        'methods'             => WP_REST_Server::CREATABLE,
+                        'callback'            => array( $this, 'test_webhook' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                        'args'                => array( 'id' => array( 'validate_callback' => 'is_numeric' ) ),
+                    ),
                 ),
-            )
-        );
+            );
 
-        register_rest_route(
-            $this->namespace,
-            '/smtp/test',
-            array(
+            register_rest_route(
+                $namespace,
+                '/smtp/test',
                 array(
-                    'methods'             => WP_REST_Server::CREATABLE,
-                    'callback'            => array( $this, 'test_smtp' ),
-                    'permission_callback' => array( $this, 'admin_permissions_check' ),
+                    array(
+                        'methods'             => WP_REST_Server::CREATABLE,
+                        'callback'            => array( $this, 'test_smtp' ),
+                        'permission_callback' => array( $this, 'admin_permissions_check' ),
+                    ),
                 ),
-            )
-        );
+            );
+        }
     }
 
     public function get_items( $request ) {

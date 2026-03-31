@@ -5,35 +5,38 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AOSAI_REST_Inbound extends WP_REST_Controller {
 
-    protected $namespace = 'agency-os-ai/v1';
+    protected $namespace = 'aosai/v1';
+    protected $legacy_namespace = 'agency-os-ai/v1';
     protected $rest_base = 'inbound';
 
     public function register_routes(): void {
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/email',
-            array(
+        foreach ( array_unique( array( $this->namespace, $this->legacy_namespace ) ) as $namespace ) {
+            register_rest_route(
+                $namespace,
+                '/' . $this->rest_base . '/email',
                 array(
-                    'methods'             => WP_REST_Server::CREATABLE,
-                    'callback'            => array( $this, 'receive_email' ),
-                    'permission_callback' => array( $this, 'verify_inbound_token' ),
-                    'args'                => $this->get_inbound_args(),
+                    array(
+                        'methods'             => WP_REST_Server::CREATABLE,
+                        'callback'            => array( $this, 'receive_email' ),
+                        'permission_callback' => array( $this, 'verify_inbound_token' ),
+                        'args'                => $this->get_inbound_args(),
+                    ),
                 ),
-            )
-        );
+            );
 
-        register_rest_route(
-            $this->namespace,
-            '/' . $this->rest_base . '/email-pipe',
-            array(
+            register_rest_route(
+                $namespace,
+                '/' . $this->rest_base . '/email-pipe',
                 array(
-                    'methods'             => WP_REST_Server::CREATABLE,
-                    'callback'            => array( $this, 'receive_email' ),
-                    'permission_callback' => array( $this, 'verify_inbound_token' ),
-                    'args'                => $this->get_inbound_args(),
+                    array(
+                        'methods'             => WP_REST_Server::CREATABLE,
+                        'callback'            => array( $this, 'receive_email' ),
+                        'permission_callback' => array( $this, 'verify_inbound_token' ),
+                        'args'                => $this->get_inbound_args(),
+                    ),
                 ),
-            )
-        );
+            );
+        }
     }
 
     public function receive_email( $request ) {
@@ -138,7 +141,8 @@ class AOSAI_REST_Inbound extends WP_REST_Controller {
     }
 
     private function route_to_department( string $text ): int {
-        if ( 'yes' !== get_option( 'aosai_ticket_ai_routing', 'yes' ) ) {
+        $inbound_routing = (string) get_option( 'aosai_inbound_ai_routing', get_option( 'aosai_ticket_ai_routing', 'yes' ) );
+        if ( 'yes' !== $inbound_routing ) {
             return $this->get_default_department_id();
         }
 

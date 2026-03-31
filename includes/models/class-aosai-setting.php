@@ -8,6 +8,7 @@ class AOSAI_Setting {
     use AOSAI_Singleton;
 
     public const MASKED_API_KEY = '********';
+    public const MASKED_SECRET  = '********';
 
     private array $key_map = array();
     private array $defaults = array();
@@ -32,6 +33,15 @@ class AOSAI_Setting {
             'email_from_name'         => 'aosai_email_from_name',
             'email_from_email'        => 'aosai_email_from_email',
             'email_footer_text'       => 'aosai_email_footer_text',
+            'smtp_enabled'            => 'aosai_smtp_enabled',
+            'smtp_host'               => 'aosai_smtp_host',
+            'smtp_port'               => 'aosai_smtp_port',
+            'smtp_username'           => 'aosai_smtp_username',
+            'smtp_password'           => 'aosai_smtp_password',
+            'smtp_encryption'         => 'aosai_smtp_encryption',
+            'smtp_auth'               => 'aosai_smtp_auth',
+            'inbound_ai_routing'      => 'aosai_inbound_ai_routing',
+            'inbound_email_token'     => 'aosai_inbound_email_token',
             'portal_name'             => 'aosai_portal_name',
             'portal_welcome_title'    => 'aosai_portal_welcome_title',
             'portal_welcome_text'     => 'aosai_portal_welcome_text',
@@ -68,6 +78,15 @@ class AOSAI_Setting {
             'aosai_email_from_name'         => get_bloginfo( 'name' ),
             'aosai_email_from_email'        => get_option( 'admin_email' ),
             'aosai_email_footer_text'       => 'You are receiving this update because you are a member of the workspace.',
+            'aosai_smtp_enabled'            => 'no',
+            'aosai_smtp_host'               => '',
+            'aosai_smtp_port'               => 587,
+            'aosai_smtp_username'           => '',
+            'aosai_smtp_password'           => '',
+            'aosai_smtp_encryption'         => 'tls',
+            'aosai_smtp_auth'               => 'yes',
+            'aosai_inbound_ai_routing'      => 'yes',
+            'aosai_inbound_email_token'     => (string) get_option( 'aosai_inbound_email_token', '' ),
             'aosai_portal_name'             => get_bloginfo( 'name' ) . ' Workspace',
             'aosai_portal_welcome_title'    => 'Client and team workspace',
             'aosai_portal_welcome_text'     => 'Track projects, collaborate with your team, and manage support requests in one branded portal.',
@@ -92,8 +111,18 @@ class AOSAI_Setting {
         foreach ( $this->key_map as $frontend_key => $internal_key ) {
             $value = get_option( $internal_key, $this->defaults[ $internal_key ] ?? null );
 
+            if ( 'inbound_email_token' === $frontend_key ) {
+                $settings[ $frontend_key ] = $this->get_inbound_email_token();
+                continue;
+            }
+
             if ( 'openai_api_key' === $frontend_key && ! empty( $value ) ) {
                 $settings[ $frontend_key ] = self::MASKED_API_KEY;
+                continue;
+            }
+
+            if ( 'smtp_password' === $frontend_key && ! empty( $value ) ) {
+                $settings[ $frontend_key ] = self::MASKED_SECRET;
                 continue;
             }
 
@@ -113,6 +142,8 @@ class AOSAI_Setting {
         $settings['portal_page_url']        = aosai_get_portal_page_url();
         $settings['portal_login_page_url']  = aosai_get_login_page_url();
         $settings['portal_ticket_page_url'] = aosai_get_ticket_page_url();
+        $settings['inbound_email_endpoint'] = esc_url_raw( rest_url( 'aosai/v1/inbound/email' ) );
+        $settings['inbound_email_pipe_endpoint'] = esc_url_raw( rest_url( 'aosai/v1/inbound/email-pipe' ) );
         $settings['shortcodes']             = $this->get_shortcodes();
 
         return $settings;
@@ -124,8 +155,16 @@ class AOSAI_Setting {
         }
 
         $value = get_option( $this->key_map[ $frontend_key ], $this->defaults[ $this->key_map[ $frontend_key ] ] ?? null );
+        if ( 'inbound_email_token' === $frontend_key ) {
+            return $this->get_inbound_email_token();
+        }
+
         if ( 'openai_api_key' === $frontend_key && ! empty( $value ) ) {
             return self::MASKED_API_KEY;
+        }
+
+        if ( 'smtp_password' === $frontend_key && ! empty( $value ) ) {
+            return self::MASKED_SECRET;
         }
 
         if ( $this->is_boolean_key( $frontend_key ) ) {
@@ -258,6 +297,14 @@ class AOSAI_Setting {
             return $value;
         }
 
+        if ( 'smtp_password' === $key ) {
+            $value = sanitize_text_field( (string) $value );
+            if ( '' === $value || self::MASKED_SECRET === $value ) {
+                return null;
+            }
+            return $value;
+        }
+
         if ( $this->is_boolean_key( $key ) ) {
             return rest_sanitize_boolean( $value ) ? 'yes' : 'no';
         }
@@ -280,11 +327,20 @@ class AOSAI_Setting {
             case 'support_email':
             case 'email_from_email':
                 return sanitize_email( (string) $value );
+            case 'smtp_host':
+            case 'smtp_username':
+                return sanitize_text_field( (string) $value );
             case 'company_website':
             case 'privacy_policy_url':
             case 'terms_url':
             case 'company_logo_url':
                 return esc_url_raw( (string) $value );
+            case 'smtp_encryption':
+                $allowed = array( 'none', 'tls', 'ssl' );
+                $value   = sanitize_key( (string) $value );
+                return in_array( $value, $allowed, true ) ? $value : 'tls';
+            case 'inbound_email_token':
+                return sanitize_text_field( (string) $value );
             case 'ticket_default_priority':
                 $allowed = array( 'low', 'medium', 'high', 'urgent' );
                 $value   = sanitize_key( (string) $value );
@@ -305,13 +361,25 @@ class AOSAI_Setting {
     private function is_boolean_key( string $key ): bool {
         return in_array(
             $key,
-            array( 'email_notifications', 'hide_admin_bar', 'force_frontend_dashboard', 'enable_pwa', 'show_footer_credit', 'ticket_ai_routing' ),
+            array( 'email_notifications', 'smtp_enabled', 'smtp_auth', 'hide_admin_bar', 'force_frontend_dashboard', 'enable_pwa', 'show_footer_credit', 'ticket_ai_routing', 'inbound_ai_routing' ),
             true
         );
     }
 
     private function is_integer_key( string $key ): bool {
-        return in_array( $key, array( 'portal_page_id', 'portal_login_page_id', 'portal_ticket_page_id' ), true );
+        return in_array( $key, array( 'smtp_port', 'portal_page_id', 'portal_login_page_id', 'portal_ticket_page_id' ), true );
+    }
+
+    private function get_inbound_email_token(): string {
+        $token = (string) get_option( 'aosai_inbound_email_token', '' );
+        if ( '' !== $token ) {
+            return $token;
+        }
+
+        $token = wp_generate_password( 32, false );
+        update_option( 'aosai_inbound_email_token', $token );
+
+        return $token;
     }
 }
 

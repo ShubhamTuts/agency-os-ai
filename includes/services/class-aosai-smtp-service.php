@@ -31,7 +31,14 @@ class AOSAI_SMTP_Service {
         $phpmailer->Username   = $username;
         $phpmailer->Password   = $password;
         $phpmailer->Port       = $port;
-        $phpmailer->SMTPSecure = in_array( $encryption, array( 'tls', 'ssl' ), true ) ? $encryption : PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        $phpmailer->SMTPAutoTLS = ( 'tls' === $encryption );
+        if ( 'ssl' === $encryption ) {
+            $phpmailer->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+        } elseif ( 'tls' === $encryption ) {
+            $phpmailer->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        } else {
+            $phpmailer->SMTPSecure = '';
+        }
         $phpmailer->CharSet    = 'UTF-8';
 
         if ( ! empty( $from_name ) ) {

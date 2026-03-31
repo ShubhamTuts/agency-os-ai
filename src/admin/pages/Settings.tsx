@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { apiGet, apiPost } from '../services/api';
-import { Bot, Building2, CheckCircle, Key, Link2, Mail, PanelsTopLeft, Sparkles, Wand2 } from 'lucide-react';
+import { Bot, Building2, CheckCircle, Key, Link2, Mail, PanelsTopLeft, Server, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
 
 interface ShortcodeRef {
     label: string;
@@ -29,6 +29,15 @@ interface SettingsState {
     email_from_name: string;
     email_from_email: string;
     email_footer_text: string;
+    smtp_enabled: boolean;
+    smtp_host: string;
+    smtp_port: number;
+    smtp_username: string;
+    smtp_password: string;
+    smtp_encryption: string;
+    smtp_auth: boolean;
+    inbound_ai_routing: boolean;
+    inbound_email_token: string;
     portal_name: string;
     portal_welcome_title: string;
     portal_welcome_text: string;
@@ -47,6 +56,8 @@ interface SettingsState {
     portal_page_url?: string;
     portal_login_page_url?: string;
     portal_ticket_page_url?: string;
+    inbound_email_endpoint?: string;
+    inbound_email_pipe_endpoint?: string;
     shortcodes: ShortcodeRef[];
 }
 
@@ -55,6 +66,7 @@ const DEFAULTS: SettingsState = {
     openai_api_key: '', default_model: 'gpt-4o-mini', email_notifications: true, timezone: 'UTC', date_format: 'F j, Y', primary_color: '#0f766e',
     company_name: '', company_email: '', company_phone: '', company_website: '', privacy_policy_url: '', terms_url: '', company_address: '', company_logo_url: '',
     support_email: '', email_from_name: '', email_from_email: '', email_footer_text: '',
+    smtp_enabled: false, smtp_host: '', smtp_port: 587, smtp_username: '', smtp_password: '', smtp_encryption: 'tls', smtp_auth: true, inbound_ai_routing: true, inbound_email_token: '',
     portal_name: '', portal_welcome_title: '', portal_welcome_text: '', portal_secondary_color: '#f59e0b',
     portal_page_id: 0, portal_login_page_id: 0, portal_ticket_page_id: 0,
     hide_admin_bar: true, force_frontend_dashboard: true, enable_pwa: true, show_footer_credit: false, footer_credit_text: '', ticket_ai_routing: true,
@@ -67,8 +79,10 @@ export default function Settings() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [testing, setTesting] = useState(false);
+    const [smtpTesting, setSmtpTesting] = useState(false);
     const [creatingPages, setCreatingPages] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [smtpResult, setSmtpResult] = useState<{ success: boolean; message: string } | null>(null);
     const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'email'>('company');
 
     useEffect(() => {
@@ -119,6 +133,20 @@ export default function Settings() {
             alert(err.message || 'Unable to create portal pages.');
         } finally {
             setCreatingPages(false);
+        }
+    }
+
+    async function handleTestSmtp() {
+        setSmtpTesting(true);
+        setSmtpResult(null);
+        try {
+            await apiPost<SettingsState>('/aosai/v1/settings', settings);
+            const result = await apiPost<{ success: boolean; message: string }>('/aosai/v1/smtp/test');
+            setSmtpResult(result);
+        } catch (err: any) {
+            setSmtpResult({ success: false, message: err.message || 'SMTP test failed.' });
+        } finally {
+            setSmtpTesting(false);
         }
     }
 
@@ -270,16 +298,74 @@ export default function Settings() {
                                     <input value={settings.email_from_email} onChange={(e) => setSettings((prev) => ({ ...prev, email_from_email: e.target.value }))} placeholder="From email" className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
                                     <textarea value={settings.email_footer_text} onChange={(e) => setSettings((prev) => ({ ...prev, email_footer_text: e.target.value }))} placeholder="Email footer text" rows={5} className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
                                 </div>
+
+                                <div className="mt-8 border-t border-gray-200 pt-6">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">SMTP Transport</h3>
+                                            <p className="mt-1 text-sm text-gray-500">Route outgoing mail through your own SMTP server instead of the host default mailer.</p>
+                                        </div>
+                                        <Server className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <div className="mt-5 space-y-4">
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm"><span>Enable SMTP</span><input type="checkbox" checked={settings.smtp_enabled} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_enabled: e.target.checked }))} /></label>
+                                            <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm"><span>Use SMTP authentication</span><input type="checkbox" checked={settings.smtp_auth} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_auth: e.target.checked }))} /></label>
+                                        </div>
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <input value={settings.smtp_host} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_host: e.target.value }))} placeholder="SMTP host" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                            <input type="number" min={1} value={settings.smtp_port} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_port: parseInt(e.target.value, 10) || 587 }))} placeholder="SMTP port" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                            <input value={settings.smtp_username} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_username: e.target.value }))} placeholder="SMTP username" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                            <input type="password" value={settings.smtp_password} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_password: e.target.value }))} placeholder="SMTP password" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                            <select value={settings.smtp_encryption} onChange={(e) => setSettings((prev) => ({ ...prev, smtp_encryption: e.target.value }))} className="rounded-2xl border border-gray-300 px-4 py-3 text-sm md:col-span-2">
+                                                <option value="tls">TLS</option>
+                                                <option value="ssl">SSL</option>
+                                                <option value="none">None</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <button type="button" onClick={handleTestSmtp} disabled={smtpTesting || !settings.smtp_enabled || !settings.smtp_host} className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">
+                                                <Mail className="h-4 w-4" /> {smtpTesting ? 'Testing SMTP...' : 'Send SMTP Test'}
+                                            </button>
+                                            {smtpResult && <div className={`rounded-2xl px-4 py-3 text-sm font-medium ${smtpResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{smtpResult.message}</div>}
+                                        </div>
+                                    </div>
+                                </div>
                             </section>
-                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">What This Powers</h2>
-                                <ul className="mt-5 space-y-3 text-sm text-gray-600">
-                                    <li className="rounded-2xl border border-gray-200 px-4 py-3">Ticket acknowledgements to clients</li>
-                                    <li className="rounded-2xl border border-gray-200 px-4 py-3">Department alerts for new support requests</li>
-                                    <li className="rounded-2xl border border-gray-200 px-4 py-3">Task and collaboration notifications</li>
-                                    <li className="rounded-2xl border border-gray-200 px-4 py-3">Branded sender identity without footer credit lock-in</li>
-                                </ul>
-                            </section>
+                            <div className="space-y-6">
+                                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Inbound Email Tickets</h2>
+                                            <p className="mt-1 text-sm text-gray-500">Create tickets from email pipes, relay hooks, or automation tools with a signed inbound endpoint.</p>
+                                        </div>
+                                        <ShieldCheck className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <div className="mt-5 space-y-4">
+                                        <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm"><span>Use AI routing on inbound email</span><input type="checkbox" checked={settings.inbound_ai_routing} onChange={(e) => setSettings((prev) => ({ ...prev, inbound_ai_routing: e.target.checked }))} /></label>
+                                        <input value={settings.inbound_email_token} onChange={(e) => setSettings((prev) => ({ ...prev, inbound_email_token: e.target.value }))} placeholder="Inbound security token" className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                        <div>
+                                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Inbound endpoint</p>
+                                            <input readOnly value={settings.inbound_email_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                        </div>
+                                        <div>
+                                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Email pipe endpoint</p>
+                                            <input readOnly value={settings.inbound_email_pipe_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                        </div>
+                                        <p className="text-xs leading-6 text-gray-500">Pass the token as `token` or `X-AOSAI-Inbound-Token`. Payloads can include `from_email`, `from_name`, `subject`, `body_plain`, `body_html`, and optional `priority`.</p>
+                                    </div>
+                                </section>
+
+                                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">What This Powers</h2>
+                                    <ul className="mt-5 space-y-3 text-sm text-gray-600">
+                                        <li className="rounded-2xl border border-gray-200 px-4 py-3">Ticket acknowledgements to clients</li>
+                                        <li className="rounded-2xl border border-gray-200 px-4 py-3">Department alerts for new support requests</li>
+                                        <li className="rounded-2xl border border-gray-200 px-4 py-3">Task and collaboration notifications</li>
+                                        <li className="rounded-2xl border border-gray-200 px-4 py-3">SMTP delivery and inbound email-to-ticket workflows</li>
+                                    </ul>
+                                </section>
+                            </div>
                         </div>
                     )}
 
