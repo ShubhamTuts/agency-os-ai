@@ -1,8 +1,22 @@
 <?php
+/**
+ * Task Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.0.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Task class
+ *
+ * Handles task CRUD operations with proper input sanitization.
+ *
+ * @since 1.0.0
+ */
 class AOSAI_Task {
     use AOSAI_Singleton;
     

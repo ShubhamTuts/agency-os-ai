@@ -25,6 +25,36 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
             ),
         ) );
         
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/from-time-entries', array(
+            'methods'             => \WP_REST_Server::CREATABLE,
+            'callback'            => array( $this, 'create_from_time_entries' ),
+            'permission_callback' => array( $this, 'create_item_permissions_check' ),
+            'args'               => array(
+                'client_id' => array(
+                    'description' => __( 'Client ID for the invoice.', 'agency-os-ai' ),
+                    'type'        => 'integer',
+                    'required'    => true,
+                ),
+                'project_id' => array(
+                    'description' => __( 'Project ID to get time entries from.', 'agency-os-ai' ),
+                    'type'        => 'integer',
+                ),
+                'time_entry_ids' => array(
+                    'description' => __( 'Specific time entry IDs to include. If empty, includes all unbilled entries.', 'agency-os-ai' ),
+                    'type'        => 'array',
+                    'items'       => array( 'type' => 'integer' ),
+                ),
+                'due_date' => array(
+                    'description' => __( 'Invoice due date.', 'agency-os-ai' ),
+                    'type'        => 'string',
+                ),
+                'notes' => array(
+                    'description' => __( 'Invoice notes.', 'agency-os-ai' ),
+                    'type'        => 'string',
+                ),
+            ),
+        ) );
+        
         register_rest_route( $this->namespace, '/' . $this->rest_base . '/stats', array(
             'methods'             => \WP_REST_Server::READABLE,
             'callback'            => array( $this, 'get_stats' ),
@@ -173,6 +203,94 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
         return new \WP_REST_Response( $item, 201 );
     }
     
+    public function create_from_time_entries( $request ) {
+        $client_id = (int) $request->get_param( 'client_id' );
+        $project_id = (int) $request->get_param( 'project_id' );
+        $time_entry_ids = $request->get_param( 'time_entry_ids' ) ?: array();
+        $due_date = sanitize_text_field( $request->get_param( 'due_date' ) );
+        $notes = sanitize_textarea_field( $request->get_param( 'notes' ) ?: '' );
+        
+        if ( ! $client_id ) {
+            return new \WP_Error( 'rest_missing_client_id', __( 'Client ID is required.', 'agency-os-ai' ), array( 'status' => 400 ) );
+        }
+        
+        // Get client
+        $client = AOSAI_Client::get_instance()->get( $client_id );
+        if ( ! $client ) {
+            return new \WP_Error( 'rest_invalid_client', __( 'Invalid client ID.', 'agency-os-ai' ), array( 'status' => 404 ) );
+        }
+        
+        // Get unbilled time entries
+        $time_entries = AOSAI_Time_Entry::get_instance()->get_unbilled_entries( $client_id, $project_id );
+        
+        if ( ! empty( $time_entry_ids ) ) {
+            $time_entries = array_filter( $time_entries, function( $entry ) use ( $time_entry_ids ) {
+                return in_array( (int) $entry['id'], array_map( 'intval', $time_entry_ids ), true );
+            } );
+        }
+        
+        if ( empty( $time_entries ) ) {
+            return new \WP_Error( 'rest_no_time_entries', __( 'No unbilled time entries found.', 'agency-os-ai' ), array( 'status' => 400 ) );
+        }
+        
+        // Convert time entries to line items
+        $line_items = array();
+        $project_names = array();
+        
+        foreach ( $time_entries as $entry ) {
+            if ( ! empty( $entry['project_name'] ) && ! in_array( $entry['project_name'], $project_names, true ) ) {
+                $project_names[] = $entry['project_name'];
+            }
+            
+            $description = $entry['description'] ?: 'Time logged';
+            if ( ! empty( $entry['project_name'] ) ) {
+                $description .= ' (' . $entry['project_name'] . ')';
+            }
+            
+            $line_items[] = array(
+                'description' => $description,
+                'quantity'   => (float) $entry['duration'],
+                'rate'       => 0, // Will need to set hourly rate
+                'amount'     => 0,
+            );
+        }
+        
+        // Build invoice data
+        $invoice_data = array(
+            'client_id'   => $client_id,
+            'project_id'  => $project_id ?: null,
+            'description'  => ! empty( $project_names ) ? 'Time tracking for: ' . implode( ', ', $project_names ) : 'Time tracking',
+            'line_items'   => $line_items,
+            'tax_rate'     => 0,
+            'due_date'    => $due_date ?: date( 'Y-m-d', strtotime( '+30 days' ) ),
+            'notes'       => $notes,
+            'status'      => 'draft',
+        );
+        
+        // Create invoice
+        $invoice = AOSAI_Invoice::get_instance();
+        $result = $invoice->create( $invoice_data );
+        
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+        
+        // Mark time entries as invoiced
+        $time_entry_ids_marked = array();
+        foreach ( $time_entries as $entry ) {
+            AOSAI_Time_Entry::get_instance()->mark_as_invoiced( (int) $entry['id'], $result );
+            $time_entry_ids_marked[] = (int) $entry['id'];
+        }
+        
+        $item = $invoice->get( $result );
+        
+        return new \WP_REST_Response( array(
+            'invoice'          => $item,
+            'time_entries'     => $time_entry_ids_marked,
+            'line_items_count' => count( $line_items ),
+        ), 201 );
+    }
+    
     public function update_item( $request ) {
         $invoice = AOSAI_Invoice::get_instance();
         
@@ -242,16 +360,54 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
             return new \WP_Error( 'rest_invoice_missing_email', __( 'This invoice does not have a client email address.', 'agency-os-ai' ), array( 'status' => 400 ) );
         }
 
-        /* translators: 1: invoice number, 2: company name */
-        $subject = sprintf( __( 'Invoice %1$s from %2$s', 'agency-os-ai' ), $invoice['invoice_number'], get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) );
-        $body    = sprintf(
-            /* translators: 1: invoice number, 2: formatted total, 3: due date text, 4: invoice URL */
-            __( "Hello,\n\nYour invoice %1\$s is ready.\nTotal: %2\$s\nDue date: %3\$s\n\nYou can review it here:\n%4\$s", 'agency-os-ai' ),
-            $invoice['invoice_number'],
-            wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
-            ! empty( $invoice['due_date'] ) ? $invoice['due_date'] : __( 'No due date set', 'agency-os-ai' ),
-            rest_url( $this->namespace . '/' . $this->rest_base . '/' . (int) $invoice['id'] . '/pdf' )
+        // Build template data
+        $template_data = array(
+            'client_name'        => (string) ( $invoice['client']['name'] ?? '' ),
+            'client_email'       => $client_email,
+            'invoice_number'     => (string) ( $invoice['invoice_number'] ?? '' ),
+            'invoice_issue_date' => ! empty( $invoice['issue_date'] ) ? date_i18n( get_option( 'date_format' ), strtotime( $invoice['issue_date'] ) ) : '',
+            'invoice_due_date'   => ! empty( $invoice['due_date'] ) ? date_i18n( get_option( 'date_format' ), strtotime( $invoice['due_date'] ) ) : __( 'No due date', 'agency-os-ai' ),
+            'invoice_amount'     => wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
+            'invoice_description' => wp_strip_all_tags( (string) ( $invoice['notes'] ?? '' ) ),
+            'invoice_url'        => rest_url( $this->namespace . '/' . $this->rest_base . '/' . (int) $invoice['id'] . '/pdf' ),
+            'company_name'       => get_option( 'aosai_company_name', get_bloginfo( 'name' ) ),
+            'company_email'      => sanitize_email( (string) get_option( 'aosai_sender_email', get_option( 'admin_email' ) ) ),
         );
+
+        // Try to use email template system first
+        $email_template = AOSAI_Email_Template::get_instance()->get_by_slug( 'invoice_created', 'invoice' );
+        
+        if ( $email_template && (int) $email_template['is_active'] ) {
+            // Use dynamic email template
+            $rendered = AOSAI_Email_Template::get_instance()->render( 'invoice_created', 'invoice', $template_data );
+            
+            if ( $rendered['success'] ) {
+                $subject = $rendered['subject'];
+                $body = $rendered['body'];
+            } else {
+                // Fallback to simple template
+                $subject = sprintf( '%s %s', get_option( 'aosai_company_name', get_bloginfo( 'name' ) ), $invoice['invoice_number'] );
+                $body = sprintf(
+                    "Invoice #%s\n\nTotal: %s\nDue Date: %s\n\nView: %s",
+                    $invoice['invoice_number'],
+                    wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
+                    $template_data['invoice_due_date'],
+                    $template_data['invoice_url']
+                );
+            }
+        } else {
+            // Use built-in template
+            /* translators: 1: invoice number, 2: company name */
+            $subject = sprintf( __( 'Invoice %1$s from %2$s', 'agency-os-ai' ), $invoice['invoice_number'], get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) );
+            $body    = sprintf(
+                /* translators: 1: invoice number, 2: formatted total, 3: due date text, 4: invoice URL */
+                __( "Hello,\n\nYour invoice %1\$s is ready.\nTotal: %2\$s\nDue date: %3\$s\n\nYou can review it here:\n%4\$s", 'agency-os-ai' ),
+                $invoice['invoice_number'],
+                wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
+                $template_data['invoice_due_date'],
+                $template_data['invoice_url']
+            );
+        }
 
         $headers = array(
             'Content-Type: text/plain; charset=UTF-8',

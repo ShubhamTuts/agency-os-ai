@@ -1,8 +1,22 @@
 <?php
+/**
+ * Workflow Stage Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.5.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Workflow_Stage class
+ *
+ * Handles workflow stage CRUD operations for Kanban boards.
+ *
+ * @since 1.5.0
+ */
 class AOSAI_Workflow_Stage {
     use AOSAI_Singleton;
     

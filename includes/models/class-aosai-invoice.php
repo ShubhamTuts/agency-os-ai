@@ -1,8 +1,22 @@
 <?php
+/**
+ * Invoice Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.0.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Invoice class
+ *
+ * Handles invoice CRUD operations with proper input sanitization.
+ *
+ * @since 1.0.0
+ */
 class AOSAI_Invoice {
     use AOSAI_Singleton;
     

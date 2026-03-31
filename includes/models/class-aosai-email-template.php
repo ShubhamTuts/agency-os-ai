@@ -1,8 +1,22 @@
 <?php
+/**
+ * Email Template Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.5.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Email_Template class
+ *
+ * Handles email template CRUD operations with variable substitution.
+ *
+ * @since 1.5.0
+ */
 class AOSAI_Email_Template {
     use AOSAI_Singleton;
     

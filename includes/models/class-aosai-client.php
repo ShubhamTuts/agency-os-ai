@@ -1,8 +1,21 @@
 <?php
+/**
+ * Client Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Client class
+ *
+ * Handles client CRUD operations with proper input sanitization.
+ *
+ * @noinspection PhpNoReturnAttributeCanBeAddedInspection
+ */
 class AOSAI_Client {
     use AOSAI_Singleton;
     

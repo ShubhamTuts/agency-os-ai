@@ -1,8 +1,22 @@
 <?php
+/**
+ * Time Entry Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.5.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Time_Entry class
+ *
+ * Handles time tracking entry CRUD operations.
+ *
+ * @since 1.5.0
+ */
 class AOSAI_Time_Entry {
     use AOSAI_Singleton;
     
@@ -333,7 +347,59 @@ class AOSAI_Time_Entry {
         return $totals;
     }
     
-    public function mark_as_invoiced( array $entry_ids, int $invoice_id ): bool {
+    public function get_unbilled_entries( int $client_id = 0, int $project_id = 0 ): array {
+        global $wpdb;
+        $table = $this->get_table();
+        $params = array();
+        $sql = 'SELECT * FROM ' . $table . ' WHERE invoiced = 0 AND end_time IS NOT NULL';
+        
+        if ( $client_id > 0 ) {
+            // Get time entries for projects linked to this client
+            $client_projects_table = esc_sql( $wpdb->prefix . 'aosai_client_projects' );
+            $sql .= ' AND project_id IN (SELECT project_id FROM ' . $client_projects_table . ' WHERE client_id = %d)';
+            $params[] = $client_id;
+        }
+        
+        if ( $project_id > 0 ) {
+            $sql .= ' AND project_id = %d';
+            $params[] = $project_id;
+        }
+        
+        $sql .= ' ORDER BY start_time DESC';
+        
+        if ( ! empty( $params ) ) {
+            $entries = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+        } else {
+            $entries = $wpdb->get_results( $sql, ARRAY_A );
+        }
+        
+        foreach ( $entries as &$entry ) {
+            $entry = $this->enrich( $entry );
+        }
+        
+        return $entries;
+    }
+    
+    public function mark_as_invoiced( int $entry_id, int $invoice_id ): bool {
+        global $wpdb;
+        $table = $this->get_table();
+        
+        $result = $wpdb->update(
+            $table,
+            array(
+                'invoiced'   => 1,
+                'invoice_id'  => $invoice_id,
+                'updated_at' => current_time( 'mysql' ),
+            ),
+            array( 'id' => $entry_id ),
+            array( '%d', '%d', '%s' ),
+            array( '%d' )
+        );
+        
+        return $result !== false;
+    }
+    
+    public function mark_as_invoiced_batch( array $entry_ids, int $invoice_id ): bool {
         global $wpdb;
         $table = $this->get_table();
         

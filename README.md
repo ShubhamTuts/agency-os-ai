@@ -259,5 +259,4 @@ GPL-2.0-or-later
 ### 1.2.1 - 2026-03-30
 - Fixed a bug that prevented the admin dashboard from loading due to missing JavaScript and CSS assets.
 - Regenerated the build files to ensure all assets are up-to-date.
-- Bumped the plugin version to 1.2.1.
-- Updated documentation.
+- Released the plugin version to 1.2.1.

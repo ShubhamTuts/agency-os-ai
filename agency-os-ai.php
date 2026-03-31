@@ -31,7 +31,7 @@ function aosai_check_requirements() {
     $errors = array();
     
     if ( version_compare( PHP_VERSION, AOSAI_MIN_PHP_VERSION, '<' ) ) {
-        /* translators: 1: required PHP version, 2: current PHP version */
+        // translators: %1$s = required PHP version, %2$s = current PHP version.
         $errors[] = sprintf(
             esc_html__( 'Agency OS AI requires PHP %1$s or higher. You are running PHP %2$s.', 'agency-os-ai' ),
             AOSAI_MIN_PHP_VERSION,
@@ -40,7 +40,7 @@ function aosai_check_requirements() {
     }
     
     if ( version_compare( get_bloginfo( 'version' ), AOSAI_MIN_WP_VERSION, '<' ) ) {
-        /* translators: 1: required WordPress version, 2: current WordPress version */
+        // translators: %1$s = required WordPress version, %2$s = current WordPress version.
         $errors[] = sprintf(
             esc_html__( 'Agency OS AI requires WordPress %1$s or higher. You are running WordPress %2$s.', 'agency-os-ai' ),
             AOSAI_MIN_WP_VERSION,

@@ -1,8 +1,22 @@
 <?php
+/**
+ * Project Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.0.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Project class
+ *
+ * Handles project CRUD operations with proper input sanitization.
+ *
+ * @since 1.0.0
+ */
 class AOSAI_Project {
     use AOSAI_Singleton;
     
