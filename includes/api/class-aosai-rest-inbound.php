@@ -36,7 +36,7 @@ class AOSAI_REST_Inbound extends WP_REST_Controller {
         );
     }
 
-    public function receive_email( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function receive_email( $request ) {
         global $wpdb;
 
         $from_email = sanitize_email( (string) $request->get_param( 'from_email' ) );
@@ -210,7 +210,7 @@ class AOSAI_REST_Inbound extends WP_REST_Controller {
         }
     }
 
-    public function verify_inbound_token( WP_REST_Request $request ): bool {
+    public function verify_inbound_token( $request ) {
         $stored_token = get_option( 'aosai_inbound_email_token', '' );
         if ( empty( $stored_token ) ) {
             return false;

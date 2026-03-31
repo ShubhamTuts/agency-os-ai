@@ -78,7 +78,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         );
     }
 
-    public function get_items( WP_REST_Request $request ): WP_REST_Response {
+    public function get_items( $request ) {
         global $wpdb;
 
         $items = $wpdb->get_results(
@@ -89,7 +89,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         return rest_ensure_response( $items ?: array() );
     }
 
-    public function get_item( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function get_item( $request ) {
         global $wpdb;
 
         $item = $wpdb->get_row(
@@ -104,7 +104,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         return rest_ensure_response( $item );
     }
 
-    public function create_item( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function create_item( $request ) {
         global $wpdb;
 
         $name   = sanitize_text_field( (string) $request->get_param( 'name' ) );
@@ -145,7 +145,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         return new WP_REST_Response( $item, 201 );
     }
 
-    public function update_item( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function update_item( $request ) {
         global $wpdb;
 
         $id = absint( $request['id'] );
@@ -190,7 +190,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         return rest_ensure_response( $item );
     }
 
-    public function delete_item( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function delete_item( $request ) {
         global $wpdb;
 
         $id = absint( $request['id'] );
@@ -204,7 +204,7 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         return rest_ensure_response( array( 'deleted' => true ) );
     }
 
-    public function test_webhook( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+    public function test_webhook( $request ) {
         global $wpdb;
 
         $id = absint( $request['id'] );
@@ -253,12 +253,12 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
         ) );
     }
 
-    public function test_smtp( WP_REST_Request $request ): WP_REST_Response {
+    public function test_smtp( $request ) {
         $result = AOSAI_SMTP_Service::get_instance()->test_connection();
         return rest_ensure_response( $result );
     }
 
-    public function admin_permissions_check(): bool {
+    public function admin_permissions_check() {
         return current_user_can( 'manage_options' );
     }
 
