@@ -4,7 +4,7 @@ Tags: project management, task management, client portal, help desk, ai assistan
 Requires at least: 6.4
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,8 +30,16 @@ Manage projects, tasks, files, support tickets, client access, employee access, 
 
 - Modern React-powered WordPress project manager dashboard
 - Projects, task lists, tasks, milestones, messages, and file management
+- Dynamic workflow stages for richer task and ticket pipelines
+- Built-in time tracking with manual entry and timer-based capture
 - Team performance visibility in the reports screen
 - Profile and settings management for every team member
+
+**Client and billing operations**
+
+- Client management with company profiles, contacts, and project linking
+- Invoice management with line items, tax totals, send action, and print-to-PDF view
+- Free access to clients, invoices, and time tracking directly inside the admin workspace
 
 **Branded client portal**
 
@@ -41,6 +49,8 @@ Manage projects, tasks, files, support tickets, client access, employee access, 
 - Admin bar hiding and frontend-first redirect for portal users
 - One-click creation of portal, login, and support pages
 - PWA basics for an installable frontend portal experience
+- Searchable ticket inbox with status and department filters
+- Personal Kanban board for task status flow in the frontend portal
 
 **Help desk and support tickets**
 
@@ -65,6 +75,7 @@ Manage projects, tasks, files, support tickets, client access, employee access, 
 
 - Company name, logo URL, colors, and portal welcome copy from one settings screen
 - Privacy policy and terms URL fields for frontend trust links
+- Login activity and IP tracking controls for client and employee access audits
 
 ⚡ This makes Agency OS AI a strong fit if you want a **WordPress project manager, task manager, client portal, help desk, and AI agency management** foundation running on your own site, under your own domain, at no per-seat cost.
 
@@ -97,15 +108,15 @@ The free core covers the operational foundation. Agencies who want to scale fast
 
 **Advanced planning and scheduling**
 
-- Kanban board views for visual task management
+- Advanced multi-project Kanban workflows with WIP controls and swimlanes
 - Gantt chart planning for project timelines
 - Calendar and workload planning across team members
 
 **Billing and revenue**
 
-- Time tracking and billing overlays on projects and tasks
-- Automated invoicing and payment workflows
+- Payment collection workflows
 - Stripe payment gateway integration
+- Deeper billing automation and revenue reporting
 
 **Deeper integrations**
 
@@ -201,6 +212,27 @@ No other external services are contacted by the free core. Outbound webhooks fir
 
 == Changelog ==
 
+= 1.5.0 =
+- Added the 1.5.0 workspace expansion including workflow stages, email-template groundwork, login activity, and premium-ready clients, invoices, and time tracking modules.
+- Fixed a critical REST bootstrap fatal by keeping premium-only controllers out of the free-core load path unless Pro is active.
+- Corrected controller naming and request normalization for premium module routes so pro-enabled installs load them consistently.
+- Improved admin route gating so premium screens show the upgrade path instead of exposing unfinished free-core navigation.
+- Aligned plugin version metadata to 1.5.0 for WordPress, runtime assets, and package tooling.
+
+= 1.4.3 =
+- Added frontend portal task Kanban board with drag-and-drop status updates and quick status controls.
+- Normalized task workflow states so older open and done values stay aligned with the Kanban board.
+- Upgraded the portal task board with search, project filters, priority filters, and overdue workload context.
+- Added login activity tracking model and API with IP and user-agent capture for access auditing.
+- Added login activity controls and live audit feed in Settings > Automation.
+- Hardened AI model resolution to always pass a valid fallback model before API requests.
+- Hardened portal session IP resolution across common proxy headers.
+
+= 1.4.1 =
+- Guaranteed model fallback on every AI call to prevent "you must provide a model parameter" errors.
+- Portal bootstrap now records last portal IP/time and returns session metadata for auditing.
+- Version bump for build alignment.
+
 = 1.4.0 =
 - Added AI ticket assist in the frontend portal for summary, priority, department, suggested first reply, and tags
 - Added AI team coach guidance in access management using live workspace data
@@ -233,6 +265,15 @@ No other external services are contacted by the free core. Outbound webhooks fir
 - Added documentation HTML bundle
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+This release ships the 1.5.0 workspace foundation, fixes the premium REST bootstrap fatal, and aligns version metadata across the plugin package.
+
+= 1.4.3 =
+This release adds a stronger frontend Kanban workflow, login/IP activity auditing, and hardened AI model fallback handling.
+
+= 1.4.1 =
+Fixes AI model errors and adds portal session IP tracking. Update to keep AI features stable after saving settings.
 
 = 1.4.0 =
 This release adds AI ticket triage, AI team coaching, a searchable portal ticket inbox, and richer client project visibility in the frontend workspace.

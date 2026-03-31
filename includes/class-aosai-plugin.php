@@ -17,10 +17,15 @@ class AOSAI_Plugin {
         $this->define_api_hooks();
         $this->define_notification_hooks();
         $this->define_smtp_hooks();
+        $this->define_security_hooks();
     }
 
     private function load_dependencies() {
-        $models = array( 'project', 'task', 'task-list', 'milestone', 'message', 'comment', 'file', 'activity', 'setting', 'user', 'department', 'ticket', 'tag' );
+        $models = array(
+            'project', 'task', 'task-list', 'milestone', 'message', 'comment', 'file',
+            'activity', 'setting', 'user', 'department', 'ticket', 'tag', 'login-activity',
+            'client', 'invoice', 'workflow-stage', 'email-template', 'time-entry'
+        );
         foreach ( $models as $model ) {
             require_once AOSAI_PLUGIN_DIR . "includes/models/class-aosai-{$model}.php";
         }
@@ -45,6 +50,7 @@ class AOSAI_Plugin {
             'projects', 'tasks', 'task-lists', 'milestones', 'messages',
             'comments', 'files', 'activities', 'ai', 'settings', 'users', 'reports', 'profile',
             'portal', 'tickets', 'departments', 'tags', 'webhooks', 'inbound',
+            'clients', 'invoices', 'time-entries',
         );
         foreach ( $controllers as $ctrl ) {
             require_once AOSAI_PLUGIN_DIR . "includes/api/class-aosai-rest-{$ctrl}.php";
@@ -99,6 +105,9 @@ class AOSAI_Plugin {
             new AOSAI_REST_Tags(),
             new AOSAI_REST_Webhooks(),
             new AOSAI_REST_Inbound(),
+            new AOSAI_REST_Clients(),
+            new AOSAI_REST_Invoices(),
+            new AOSAI_REST_Time_Entries(),
         );
 
         foreach ( $controllers as $controller ) {
@@ -122,8 +131,15 @@ class AOSAI_Plugin {
         $this->loader->add_action( 'phpmailer_init', $smtp, 'configure_phpmailer' );
     }
 
+    private function define_security_hooks() {
+        $login_activity = AOSAI_Login_Activity::get_instance();
+        $this->loader->add_action( 'init', $login_activity, 'ensure_table' );
+        $this->loader->add_action( 'wp_login', $login_activity, 'on_user_login', 10, 2 );
+        $this->loader->add_action( 'wp_login_failed', $login_activity, 'on_login_failed', 10, 1 );
+        $this->loader->add_action( 'wp_logout', $login_activity, 'on_user_logout' );
+    }
+
     public function run() {
         $this->loader->run();
     }
 }
-

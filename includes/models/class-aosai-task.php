@@ -203,6 +203,8 @@ class AOSAI_Task {
         $table = $this->get_table();
         
         $sanitized = $this->sanitize_input( $data );
+        $status    = $this->normalize_status_value( (string) ( $sanitized['status'] ?? 'todo' ) );
+        $kanban    = $this->normalize_kanban_value( (string) ( $sanitized['kanban_column'] ?? '' ), $status );
         
         if ( empty( $sanitized['title'] ) ) {
             return new \WP_Error( 'missing_title', esc_html__( 'Task title is required.', 'agency-os-ai' ) );
@@ -223,14 +225,14 @@ class AOSAI_Task {
                 'parent_id'      => $sanitized['parent_id'] ?? null,
                 'title'          => $sanitized['title'],
                 'description'    => $sanitized['description'] ?? '',
-                'status'         => $sanitized['status'] ?? 'open',
+                'status'         => $status,
                 'priority'       => $sanitized['priority'] ?? 'medium',
                 'start_date'     => $sanitized['start_date'] ?? null,
                 'due_date'       => $sanitized['due_date'] ?? null,
                 'estimated_hours'=> $sanitized['estimated_hours'] ?? 0,
                 'sort_order'     => $max_order + 1,
                 'is_private'     => $sanitized['is_private'] ?? 0,
-                'kanban_column'  => $sanitized['kanban_column'] ?? 'open',
+                'kanban_column'  => $kanban,
                 'created_by'    => get_current_user_id(),
             ),
             array( '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%f', '%d', '%d', '%s', '%d' )
@@ -284,16 +286,16 @@ class AOSAI_Task {
         }
 
         $sanitized['updated_at'] = current_time( 'mysql' );
-        
-        // Handle status mapping for backwards compatibility
-        if (isset($sanitized['status']) && $sanitized['status'] === 'done') {
-            $sanitized['status'] = 'completed';
-        }
 
         $done_statuses = array( 'completed' );
         if ( isset( $sanitized['status'] ) && in_array( $sanitized['status'], $done_statuses, true ) && ! in_array( $task['status'], $done_statuses, true ) ) {
             $sanitized['completed_at'] = current_time( 'mysql' );
             $sanitized['completed_by'] = get_current_user_id();
+        }
+
+        if ( isset( $sanitized['status'] ) && ! in_array( $sanitized['status'], $done_statuses, true ) && in_array( $task['status'], $done_statuses, true ) ) {
+            $sanitized['completed_at'] = null;
+            $sanitized['completed_by'] = null;
         }
         
         $result = $wpdb->update(
@@ -437,11 +439,17 @@ class AOSAI_Task {
     
     public function enrich( array $task ): array {
         $id = (int) $task['id'];
+        $raw_status = (string) ( $task['status'] ?? '' );
+        $normalized_status = $this->normalize_status_value( $raw_status );
 
         $task['assignees']         = $this->get_assignees( $id );
         $task['comments_count']    = $this->get_comments_count( $id );
         $task['attachments_count'] = $this->get_attachments_count( $id );
         $task['position']          = isset( $task['sort_order'] ) ? (int) $task['sort_order'] : 0;
+        $task['status_raw']        = $raw_status;
+        $task['status']            = $normalized_status;
+        $task['kanban_column']     = $this->normalize_kanban_value( (string) ( $task['kanban_column'] ?? '' ), $normalized_status );
+        $task['is_overdue']        = $this->is_task_overdue( $task );
 
         // Convenient single-assignee fields
         $first = $task['assignees'][0] ?? null;
@@ -492,6 +500,11 @@ class AOSAI_Task {
     
     private function sanitize_input( array $input ): array {
         $sanitized = array();
+
+        if ( isset( $input['position'] ) && ! isset( $input['sort_order'] ) ) {
+            $input['sort_order'] = $input['position'];
+        }
+
         $allowed_fields = [
             'title' => 'sanitize_text_field', 'description' => 'wp_kses_post', 'status' => 'sanitize_key',
             'priority' => 'sanitize_key', 'due_date' => 'sanitize_text_field', 'start_date' => 'sanitize_text_field',
@@ -499,7 +512,6 @@ class AOSAI_Task {
             'kanban_column' => 'sanitize_key', 'task_list_id' => 'absint', 'project_id' => 'absint',
             'parent_id' => 'absint'
         ];
-        $status_options = array( 'open', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'completed', 'cancelled' );
         $priority_options = array( 'low', 'medium', 'high', 'urgent' );
 
         foreach ( $input as $key => $value ) {
@@ -509,13 +521,22 @@ class AOSAI_Task {
         }
         
         if ( isset( $sanitized['status'] ) ) {
-            if ($sanitized['status'] === 'done') {
-                $sanitized['status'] = 'completed'; // Compatibility
-            }
-            if ( ! in_array( $sanitized['status'], $status_options, true ) ) {
-                $sanitized['status'] = 'todo';
-            }
+            $sanitized['status'] = $this->normalize_status_value( (string) $sanitized['status'] );
         }
+
+        if ( isset( $sanitized['kanban_column'] ) ) {
+            $status_source = isset( $sanitized['status'] ) ? (string) $sanitized['status'] : '';
+            $sanitized['kanban_column'] = $this->normalize_kanban_value( (string) $sanitized['kanban_column'], $status_source );
+        }
+
+        if ( isset( $sanitized['status'] ) && ! isset( $sanitized['kanban_column'] ) ) {
+            $sanitized['kanban_column'] = $this->normalize_kanban_value( '', (string) $sanitized['status'] );
+        }
+
+        if ( isset( $sanitized['kanban_column'] ) && ! isset( $sanitized['status'] ) ) {
+            $sanitized['status'] = $this->normalize_status_value( (string) $sanitized['kanban_column'] );
+        }
+
         if ( isset($sanitized['priority']) && !in_array($sanitized['priority'], $priority_options, true) ) {
             $sanitized['priority'] = 'medium';
         }
@@ -530,5 +551,53 @@ class AOSAI_Task {
         }
         
         return $sanitized;
+    }
+
+    private function normalize_status_value( string $status ): string {
+        $status = sanitize_key( $status );
+
+        if ( '' === $status ) {
+            return 'todo';
+        }
+
+        $map = array(
+            'open'       => 'todo',
+            'done'       => 'completed',
+            'overdue'    => 'todo',
+            'cancelled'  => 'backlog',
+        );
+
+        if ( isset( $map[ $status ] ) ) {
+            return $map[ $status ];
+        }
+
+        $allowed = array( 'backlog', 'todo', 'in_progress', 'in_review', 'completed' );
+        return in_array( $status, $allowed, true ) ? $status : 'todo';
+    }
+
+    private function normalize_kanban_value( string $kanban_column, string $status = '' ): string {
+        $kanban_column = sanitize_key( $kanban_column );
+
+        if ( '' !== $kanban_column ) {
+            return $this->normalize_status_value( $kanban_column );
+        }
+
+        return $this->normalize_status_value( $status );
+    }
+
+    private function is_task_overdue( array $task ): bool {
+        $status = (string) ( $task['status'] ?? '' );
+        $due_date = (string) ( $task['due_date'] ?? '' );
+
+        if ( '' === $due_date || in_array( $status, array( 'completed', 'done' ), true ) ) {
+            return false;
+        }
+
+        $due_timestamp = strtotime( $due_date . ' 23:59:59' );
+        if ( false === $due_timestamp ) {
+            return false;
+        }
+
+        return $due_timestamp < current_time( 'timestamp' );
     }
 }

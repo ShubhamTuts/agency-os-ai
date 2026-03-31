@@ -30,6 +30,14 @@ Agency OS AI brings those core workflows into WordPress with a modern React admi
 - Projects, task lists, tasks, milestones, messages, files, reports, profile, team, and settings
 - Branded React admin workspace with updated header logo and animated preloaders
 - Team performance visibility in the reports screen
+- **Dynamic workflow stages** - customizable Kanban columns for tasks and tickets
+- **Time tracking** - start/stop timers, time entries per task/project, billable hours tracking
+
+**Client and company management**
+
+- **Client management** - full CRM with client profiles, contacts, company details, and project linking
+- **Invoice system** - create invoices with line items, tax calculation, payment tracking, and PDF-ready format
+- Client-project relationships for organized delivery tracking
 
 **Branded client portal**
 
@@ -41,17 +49,22 @@ Agency OS AI brings those core workflows into WordPress with a modern React admi
 - PWA basics for an installable frontend portal experience
 - Searchable ticket inbox with status and department filters
 - Rich project visibility cards with task previews, milestone previews, and next-milestone insight
+- Personal Kanban board in the portal task view with drag-and-drop status updates
+- **Workload planning** - see assigned tasks and capacity across team members
 
 **Help desk and support tickets**
 
 - Support tickets, departments, ticket notes, and reusable dynamic tags
 - Department default assignee for automatic ticket routing on new submissions
+- **Ticket macros** - pre-built templates for common ticket actions
+- **SLA rules** - configurable response time targets by priority level
 - AI-assisted department routing baseline when an OpenAI key is present
 - AI ticket assist for summary, routing, priority, suggested first reply, and tags
 
 **Email, automation, and support operations**
 
 - Built-in SMTP configuration: host, port, authentication, encryption, all from the Settings screen
+- **Dynamic email templates** - customizable notification templates with variable substitution
 - Branded email notifications with customizable sender name, sender address, and footer text
 - Inbound email-to-ticket webhook endpoint (`POST /aosai/v1/inbound/email`) with token authentication for auto-creating tickets from forwarded emails
 - Outbound webhook integrations with HMAC signature verification firing on `ticket.created`, `task.created`, `project.created`, and other key events
@@ -64,12 +77,14 @@ Agency OS AI brings those core workflows into WordPress with a modern React admi
 - AI ticket triage assist in the portal
 - AI productivity brief in reports
 - AI team coach brief in access management
+- **AI task generation** - generate complete task lists from project descriptions
 
 **Company branding**
 
 - Company name, logo URL, colors, and portal welcome copy
 - Privacy policy and terms URL fields for branded frontend trust links
 - Extension-ready email hooks for future provider-specific delivery layers
+- Login activity and IP tracking controls for client and employee access auditing
 
 ## Shortcodes
 
@@ -165,7 +180,7 @@ The free core includes:
 
 These are planned add-on or future expansion areas, not features currently shipped in the free core:
 
-- Kanban board views for visual task management
+- Advanced multi-project Kanban workflows with WIP controls and swimlanes
 - Gantt chart planning for project timelines
 - Calendar and workload planning across team members
 - Time tracking and billing overlays
@@ -195,6 +210,31 @@ GPL-2.0-or-later
 
 ## Changelog
 
+### 1.5.0 - 2026-03-31
+- **Client Management System** - Full CRM with client profiles, company details, contact management, and project linking via REST API
+- **Invoice & Billing System** - Create invoices with line items, automatic tax calculation, payment tracking, invoice numbers, and PDF-ready format
+- **Dynamic Workflow Stages** - Customizable Kanban columns for tasks and tickets with color coding and reordering
+- **Dynamic Email Templates** - Fully customizable notification templates with variable substitution for all events
+- **Time Tracking** - Built-in time tracking with start/stop timers, time entries per task and project, billable hours tracking
+- **Workload Planning** - Team member capacity visibility and workload distribution across projects
+- **Enhanced Kanban** - Improved drag-and-drop functionality with proper project shifting support
+- **Ticket Macros & SLA Rules** - Pre-built ticket templates and configurable SLA response targets by priority
+- Updated database schema to 1.5.0 with new tables for clients, invoices, workflow stages, email templates, and time entries
+
+### 1.4.3 - 2026-03-31
+- Added portal task Kanban board with drag-and-drop status flow and quick status controls.
+- Normalized task workflow states so legacy open and done values stay aligned with the Kanban UI.
+- Upgraded the portal task board with search, project filters, priority filters, and overdue workload context.
+- Added login activity tracking model and API with IP/user-agent capture for client and employee access audits.
+- Added login activity controls and live audit feed in Settings > Automation.
+- Hardened AI model resolution to always provide a valid fallback model before API requests.
+- Hardened portal session IP resolution across common proxy headers for cleaner access auditing.
+
+### 1.4.1 - 2026-03-31
+- Guaranteed AI model fallback on every call to prevent "you must provide a model parameter" errors.
+- Portal bootstrap now records last portal IP/time and returns session metadata for auditing.
+- Version bump for build alignment.
+
 ### 1.4.0 - 2026-03-31
 - Added AI ticket assist in the frontend portal for summary, priority, department, suggested first reply, and tags
 - Added AI team coach brief in access management for live team guidance
@@ -204,16 +244,16 @@ GPL-2.0-or-later
 
 ### 1.3.0 - 2026-03-31
 - Added built-in SMTP configuration for reliable email delivery from the Settings screen (host, port, auth, encryption)
-- Added inbound email-to-ticket webhook endpoint (`POST /aosai/v1/inbound/email`) with token authentication for auto-creating tickets from forwarded emails
-- Added outbound webhook integrations with HMAC signature verification for `ticket.created`, `task.created`, `project.created`, and other key events
+- Added inbound email-to-ticket webhook endpoint (POST /aosai/v1/inbound/email) with token authentication for auto-creating tickets from forwarded emails
+- Added outbound webhook integrations with HMAC signature verification for 	icket.created, 	ask.created, project.created, and other key events
 - Added department default assignee for automatic ticket assignment on new submissions
 - Fixed 404 errors on dynamically-imported JS assets caused by incorrect Vite base path; rebuilt with correct relative base
 - Fixed admin bar display on portal pages for administrator roles
 - Bumped tested-up-to to 6.9
 
 ### 1.2.2 - 2026-03-31
-- Fixed critical black-screen bug: Vite was building chunk URLs as absolute paths (`/assets/...`) causing 404s on any WordPress install. Set `base: './'` so dynamic imports resolve relative to the entry script via `import.meta.url`.
-- Fixed translation textdomain loading too early: `load_plugin_textdomain` was registered on `plugins_loaded` inside code that itself runs on `plugins_loaded` (already fired), so translations never loaded. Moved hook to `init`.
+- Fixed critical black-screen bug: Vite was building chunk URLs as absolute paths (/assets/...) causing 404s on any WordPress install. Set ase: './' so dynamic imports resolve relative to the entry script via import.meta.url.
+- Fixed translation textdomain loading too early: load_plugin_textdomain was registered on plugins_loaded inside code that itself runs on plugins_loaded (already fired), so translations never loaded. Moved hook to init.
 - Updated tested-up-to to 6.9.
 
 ### 1.2.1 - 2026-03-30

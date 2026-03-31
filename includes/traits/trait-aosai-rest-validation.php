@@ -37,8 +37,21 @@ trait AOSAI_REST_Validation {
             $sanitized['description'] = wp_kses_post( wp_unslash( $input['description'] ) );
         }
         if ( isset( $input['status'] ) ) {
-            $allowed = array( 'open', 'in_progress', 'done', 'overdue', 'cancelled' );
-            $sanitized['status'] = in_array( $input['status'], $allowed, true ) ? $input['status'] : 'open';
+            $allowed = array( 'open', 'backlog', 'todo', 'in_progress', 'in_review', 'done', 'completed', 'overdue', 'cancelled' );
+            $status = sanitize_key( (string) $input['status'] );
+            if ( 'done' === $status ) {
+                $status = 'completed';
+            }
+            if ( 'open' === $status ) {
+                $status = 'todo';
+            }
+            if ( 'cancelled' === $status ) {
+                $status = 'backlog';
+            }
+            if ( 'overdue' === $status ) {
+                $status = 'todo';
+            }
+            $sanitized['status'] = in_array( $status, $allowed, true ) ? $status : 'todo';
         }
         if ( isset( $input['priority'] ) ) {
             $allowed = array( 'low', 'medium', 'high', 'urgent' );
@@ -55,6 +68,8 @@ trait AOSAI_REST_Validation {
         }
         if ( isset( $input['sort_order'] ) ) {
             $sanitized['sort_order'] = intval( $input['sort_order'] );
+        } elseif ( isset( $input['position'] ) ) {
+            $sanitized['sort_order'] = intval( $input['position'] );
         }
         if ( isset( $input['is_private'] ) ) {
             $sanitized['is_private'] = ! empty( $input['is_private'] ) ? 1 : 0;
@@ -66,7 +81,8 @@ trait AOSAI_REST_Validation {
             $sanitized['recurrence_rule'] = sanitize_text_field( wp_unslash( $input['recurrence_rule'] ) );
         }
         if ( isset( $input['kanban_column'] ) ) {
-            $sanitized['kanban_column'] = sanitize_key( wp_unslash( $input['kanban_column'] ) );
+            $column = sanitize_key( wp_unslash( $input['kanban_column'] ) );
+            $sanitized['kanban_column'] = 'overdue' === $column ? 'todo' : $column;
         }
         if ( isset( $input['task_list_id'] ) ) {
             $sanitized['task_list_id'] = absint( $input['task_list_id'] );

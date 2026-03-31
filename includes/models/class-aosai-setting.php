@@ -56,7 +56,14 @@ class AOSAI_Setting {
             'footer_credit_text'      => 'aosai_footer_credit_text',
             'ticket_ai_routing'       => 'aosai_ticket_ai_routing',
             'ticket_default_priority' => 'aosai_ticket_default_priority',
+            'ticket_sla_low_hours'    => 'aosai_ticket_sla_low_hours',
+            'ticket_sla_medium_hours' => 'aosai_ticket_sla_medium_hours',
+            'ticket_sla_high_hours'   => 'aosai_ticket_sla_high_hours',
+            'ticket_sla_urgent_hours' => 'aosai_ticket_sla_urgent_hours',
+            'ticket_macro_library'    => 'aosai_ticket_macro_library',
+            'workload_capacity_per_member' => 'aosai_workload_capacity_per_member',
             'portal_dashboard_layout' => 'aosai_portal_dashboard_layout',
+            'login_tracking_enabled'  => 'aosai_login_tracking_enabled',
         );
 
         $this->defaults = array(
@@ -101,7 +108,14 @@ class AOSAI_Setting {
             'aosai_footer_credit_text'      => '',
             'aosai_ticket_ai_routing'       => 'yes',
             'aosai_ticket_default_priority' => 'medium',
+            'aosai_ticket_sla_low_hours'    => 72,
+            'aosai_ticket_sla_medium_hours' => 24,
+            'aosai_ticket_sla_high_hours'   => 8,
+            'aosai_ticket_sla_urgent_hours' => 2,
+            'aosai_ticket_macro_library'    => $this->get_default_macro_library(),
+            'aosai_workload_capacity_per_member' => 8,
             'aosai_portal_dashboard_layout' => 'split',
+            'aosai_login_tracking_enabled'  => 'yes',
         );
     }
 
@@ -121,6 +135,12 @@ class AOSAI_Setting {
                 continue;
             }
 
+            if ( 'default_model' === $frontend_key ) {
+                $model = sanitize_text_field( (string) $value );
+                $settings[ $frontend_key ] = '' !== trim( $model ) ? $model : (string) $this->defaults['aosai_openai_model'];
+                continue;
+            }
+
             if ( 'smtp_password' === $frontend_key && ! empty( $value ) ) {
                 $settings[ $frontend_key ] = self::MASKED_SECRET;
                 continue;
@@ -133,6 +153,11 @@ class AOSAI_Setting {
 
             if ( $this->is_integer_key( $frontend_key ) ) {
                 $settings[ $frontend_key ] = absint( $value );
+                continue;
+            }
+
+            if ( 'ticket_macro_library' === $frontend_key ) {
+                $settings[ $frontend_key ] = $this->normalize_macro_library( $value );
                 continue;
             }
 
@@ -163,6 +188,11 @@ class AOSAI_Setting {
             return self::MASKED_API_KEY;
         }
 
+        if ( 'default_model' === $frontend_key ) {
+            $model = sanitize_text_field( (string) $value );
+            return '' !== trim( $model ) ? $model : (string) $this->defaults['aosai_openai_model'];
+        }
+
         if ( 'smtp_password' === $frontend_key && ! empty( $value ) ) {
             return self::MASKED_SECRET;
         }
@@ -173,6 +203,10 @@ class AOSAI_Setting {
 
         if ( $this->is_integer_key( $frontend_key ) ) {
             return absint( $value );
+        }
+
+        if ( 'ticket_macro_library' === $frontend_key ) {
+            return $this->normalize_macro_library( $value );
         }
 
         return $value;
@@ -239,11 +273,30 @@ class AOSAI_Setting {
         );
     }
 
+    public function get_ticket_sla_rules(): array {
+        return array(
+            'low'    => max( 1, (int) $this->get( 'ticket_sla_low_hours' ) ),
+            'medium' => max( 1, (int) $this->get( 'ticket_sla_medium_hours' ) ),
+            'high'   => max( 1, (int) $this->get( 'ticket_sla_high_hours' ) ),
+            'urgent' => max( 1, (int) $this->get( 'ticket_sla_urgent_hours' ) ),
+        );
+    }
+
+    public function get_workload_capacity_per_member(): int {
+        return max( 1, (int) $this->get( 'workload_capacity_per_member' ) );
+    }
+
+    public function get_ticket_macro_library(): array {
+        $macros = $this->get( 'ticket_macro_library' );
+        return $this->normalize_macro_library( $macros );
+    }
+
     public function test_ai_connection( string $provider, string $api_key, string $model ): array|\WP_Error {
         $provider = $provider ?: 'openai';
         $stored_key = (string) get_option( 'aosai_openai_api_key', '' );
         $stored_model = (string) get_option( 'aosai_openai_model', $this->defaults['aosai_openai_model'] );
         $api_key = trim( $api_key );
+        $model   = trim( $model );
 
         if ( self::MASKED_API_KEY === $api_key ) {
             $api_key = $stored_key;
@@ -253,8 +306,8 @@ class AOSAI_Setting {
             return new \WP_Error( 'missing_key', __( 'API key is required.', 'agency-os-ai' ) );
         }
 
-        if ( empty( $model ) ) {
-            return new \WP_Error( 'missing_model', __( 'Model is required.', 'agency-os-ai' ) );
+        if ( '' === $model ) {
+            $model = '' !== trim( $stored_model ) ? $stored_model : (string) $this->defaults['aosai_openai_model'];
         }
 
         $ai_service = AOSAI_AI_Service::get_instance();
@@ -315,7 +368,8 @@ class AOSAI_Setting {
 
         switch ( $key ) {
             case 'default_model':
-                return sanitize_text_field( (string) $value );
+                $model = sanitize_text_field( (string) $value );
+                return '' !== trim( $model ) ? $model : (string) $this->defaults['aosai_openai_model'];
             case 'timezone':
                 return in_array( $value, timezone_identifiers_list(), true ) ? $value : $this->defaults['aosai_timezone'];
             case 'date_format':
@@ -345,6 +399,8 @@ class AOSAI_Setting {
                 $allowed = array( 'low', 'medium', 'high', 'urgent' );
                 $value   = sanitize_key( (string) $value );
                 return in_array( $value, $allowed, true ) ? $value : 'medium';
+            case 'ticket_macro_library':
+                return $this->sanitize_macro_library( $value );
             case 'portal_dashboard_layout':
                 $allowed = array( 'split', 'compact', 'stacked' );
                 $value   = sanitize_key( (string) $value );
@@ -361,13 +417,27 @@ class AOSAI_Setting {
     private function is_boolean_key( string $key ): bool {
         return in_array(
             $key,
-            array( 'email_notifications', 'smtp_enabled', 'smtp_auth', 'hide_admin_bar', 'force_frontend_dashboard', 'enable_pwa', 'show_footer_credit', 'ticket_ai_routing', 'inbound_ai_routing' ),
+            array( 'email_notifications', 'smtp_enabled', 'smtp_auth', 'hide_admin_bar', 'force_frontend_dashboard', 'enable_pwa', 'show_footer_credit', 'ticket_ai_routing', 'inbound_ai_routing', 'login_tracking_enabled' ),
             true
         );
     }
 
     private function is_integer_key( string $key ): bool {
-        return in_array( $key, array( 'smtp_port', 'portal_page_id', 'portal_login_page_id', 'portal_ticket_page_id' ), true );
+        return in_array(
+            $key,
+            array(
+                'smtp_port',
+                'portal_page_id',
+                'portal_login_page_id',
+                'portal_ticket_page_id',
+                'ticket_sla_low_hours',
+                'ticket_sla_medium_hours',
+                'ticket_sla_high_hours',
+                'ticket_sla_urgent_hours',
+                'workload_capacity_per_member',
+            ),
+            true
+        );
     }
 
     private function get_inbound_email_token(): string {
@@ -380,6 +450,133 @@ class AOSAI_Setting {
         update_option( 'aosai_inbound_email_token', $token );
 
         return $token;
+    }
+
+    private function sanitize_macro_library( $value ): array {
+        $library = is_array( $value ) ? $value : array();
+        $sanitized = array();
+
+        foreach ( $library as $index => $macro ) {
+            if ( ! is_array( $macro ) ) {
+                continue;
+            }
+
+            $normalized = $this->normalize_macro_definition( $macro, (int) $index );
+            if ( $normalized ) {
+                $sanitized[] = $normalized;
+            }
+        }
+
+        return ! empty( $sanitized ) ? $sanitized : $this->get_default_macro_library();
+    }
+
+    private function normalize_macro_library( $value ): array {
+        $library = is_array( $value ) ? $value : maybe_unserialize( $value );
+        if ( ! is_array( $library ) ) {
+            return $this->get_default_macro_library();
+        }
+
+        $normalized = array();
+        foreach ( $library as $index => $macro ) {
+            if ( ! is_array( $macro ) ) {
+                continue;
+            }
+
+            $item = $this->normalize_macro_definition( $macro, (int) $index );
+            if ( $item ) {
+                $normalized[] = $item;
+            }
+        }
+
+        return ! empty( $normalized ) ? $normalized : $this->get_default_macro_library();
+    }
+
+    private function normalize_macro_definition( array $macro, int $index ): ?array {
+        $name = sanitize_text_field( (string) ( $macro['name'] ?? '' ) );
+        if ( '' === $name ) {
+            return null;
+        }
+
+        $status = sanitize_key( (string) ( $macro['status'] ?? 'open' ) );
+        if ( ! in_array( $status, array( 'open', 'in_progress', 'waiting', 'resolved', 'closed' ), true ) ) {
+            $status = 'open';
+        }
+
+        $priority = sanitize_key( (string) ( $macro['priority'] ?? 'medium' ) );
+        if ( ! in_array( $priority, array( 'low', 'medium', 'high', 'urgent' ), true ) ) {
+            $priority = 'medium';
+        }
+
+        $tags = $macro['tags'] ?? array();
+        if ( is_string( $tags ) ) {
+            $tags = array_filter( array_map( 'trim', explode( ',', $tags ) ) );
+        }
+
+        if ( ! is_array( $tags ) ) {
+            $tags = array();
+        }
+
+        $tag_values = array();
+        foreach ( $tags as $tag ) {
+            $tag = sanitize_text_field( (string) $tag );
+            if ( '' !== $tag ) {
+                $tag_values[] = $tag;
+            }
+        }
+
+        $id = sanitize_title( (string) ( $macro['id'] ?? '' ) );
+        if ( '' === $id ) {
+            $id = sanitize_title( $name );
+        }
+        if ( '' === $id ) {
+            $id = 'macro-' . max( 1, $index + 1 );
+        }
+
+        return array(
+            'id'            => $id,
+            'name'          => $name,
+            'description'   => sanitize_text_field( (string) ( $macro['description'] ?? '' ) ),
+            'status'        => $status,
+            'priority'      => $priority,
+            'department_id' => absint( $macro['department_id'] ?? 0 ),
+            'tags'          => array_values( array_unique( $tag_values ) ),
+            'note_template' => sanitize_textarea_field( (string) ( $macro['note_template'] ?? '' ) ),
+        );
+    }
+
+    private function get_default_macro_library(): array {
+        return array(
+            array(
+                'id'            => 'urgent-client-escalation',
+                'name'          => __( 'Urgent Client Escalation', 'agency-os-ai' ),
+                'description'   => __( 'Escalate urgent requests, raise priority, and alert the delivery owner.', 'agency-os-ai' ),
+                'status'        => 'in_progress',
+                'priority'      => 'urgent',
+                'department_id' => 0,
+                'tags'          => array( 'escalated', 'client', 'urgent' ),
+                'note_template' => __( 'Urgent escalation applied. The team is reviewing the issue now and an updated ETA will be shared shortly.', 'agency-os-ai' ),
+            ),
+            array(
+                'id'            => 'waiting-on-client',
+                'name'          => __( 'Waiting On Client', 'agency-os-ai' ),
+                'description'   => __( 'Pause the workflow cleanly while awaiting assets, approval, or additional details.', 'agency-os-ai' ),
+                'status'        => 'waiting',
+                'priority'      => 'medium',
+                'department_id' => 0,
+                'tags'          => array( 'waiting', 'client-response' ),
+                'note_template' => __( 'We are currently waiting on client confirmation or assets before the next delivery step can continue.', 'agency-os-ai' ),
+            ),
+            array(
+                'id'            => 'resolved-and-monitoring',
+                'name'          => __( 'Resolved And Monitoring', 'agency-os-ai' ),
+                'description'   => __( 'Mark the ticket resolved while keeping a short observation window documented.', 'agency-os-ai' ),
+                'status'        => 'resolved',
+                'priority'      => 'low',
+                'department_id' => 0,
+                'tags'          => array( 'resolved', 'monitoring' ),
+                'note_template' => __( 'The issue has been resolved and moved into monitoring. Reply here if anything still needs follow-up.', 'agency-os-ai' ),
+            ),
+        );
     }
 }
 

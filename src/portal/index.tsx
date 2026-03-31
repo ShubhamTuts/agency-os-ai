@@ -45,7 +45,7 @@ interface Tag { id: number; name: string; color: string; }
 interface UserProfile { id: number; first_name?: string; last_name?: string; display_name?: string; name?: string; email: string; avatar_url?: string; roles?: string[]; portal_type?: string; }
 interface MilestonePreview { id: number; name: string; status?: string; due_date?: string; progress?: number; task_count?: number; completed_task_count?: number; }
 interface ProjectStats { total_tasks?: number; completed_tasks?: number; overdue_tasks?: number; total_milestones?: number; completed_milestones?: number; }
-interface Task { id: number; title: string; status: string; priority: string; due_date?: string; project_name?: string; task_list_name?: string; tags?: Tag[]; is_private?: number; }
+interface Task { id: number; title: string; status: string; status_raw?: string; priority: string; due_date?: string; project_name?: string; task_list_name?: string; tags?: Tag[]; is_private?: number; is_overdue?: boolean; }
 interface Project {
     id: number;
     name: string;
@@ -97,6 +97,15 @@ interface TicketAssistResult {
     tags: string[];
     message?: string;
 }
+interface LoginActivityItem {
+    id: number;
+    event_type: string;
+    portal_type: string;
+    ip_address: string;
+    created_at?: string;
+    user_name?: string;
+    user_login?: string;
+}
 interface PortalBootstrap {
     user: UserProfile;
     branding: Branding;
@@ -110,10 +119,20 @@ interface PortalBootstrap {
     departments: Department[];
     tags: Tag[];
     urls: { portal: string; login: string; tickets: string; logout: string; };
+    session?: { ip?: string; last_seen?: string };
 }
 
 const runtime = window.aosaiPortalData || {};
 const navIcons: Record<string, any> = { dashboard: LayoutDashboard, projects: FolderKanban, tasks: ClipboardList, tickets: LifeBuoy, files: Files, messages: Mail, profile: UserCircle2 };
+const TASK_KANBAN_COLUMNS = [
+    { id: 'backlog', label: 'Backlog' },
+    { id: 'todo', label: 'To Do' },
+    { id: 'in_progress', label: 'In Progress' },
+    { id: 'in_review', label: 'In Review' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'overdue', label: 'Overdue' },
+] as const;
+const TASK_MUTABLE_COLUMNS = TASK_KANBAN_COLUMNS.filter((column) => column.id !== 'overdue');
 
 function tone(status: string) {
     switch (status) {
@@ -149,6 +168,19 @@ function statusLabel(value?: string, fallback = 'active') {
     return (value || fallback).replace(/_/g, ' ');
 }
 
+function normalizeTaskStatus(value?: string) {
+    const status = sanitizeStatus(value);
+    if (status === 'done') return 'completed';
+    if (status === 'open') return 'todo';
+    if (status === 'cancelled') return 'backlog';
+    if (!TASK_KANBAN_COLUMNS.some((column) => column.id === status)) return 'backlog';
+    return status;
+}
+
+function sanitizeStatus(value?: string) {
+    return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 function StatCard({ label, value, help }: { label: string; value: number; help: string }) {
     return (
         <div className="rounded-[24px] border border-white/60 bg-white/90 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -180,6 +212,13 @@ function App() {
     const [ticketDepartmentFilter, setTicketDepartmentFilter] = useState('');
     const [ticketAssistLoading, setTicketAssistLoading] = useState(false);
     const [ticketAssist, setTicketAssist] = useState<TicketAssistResult | null>(null);
+    const [loginActivity, setLoginActivity] = useState<LoginActivityItem[]>([]);
+    const [loginActivityLoading, setLoginActivityLoading] = useState(false);
+    const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
+    const [movingTaskId, setMovingTaskId] = useState<number | null>(null);
+    const [taskSearch, setTaskSearch] = useState('');
+    const [taskProjectFilter, setTaskProjectFilter] = useState('all');
+    const [taskPriorityFilter, setTaskPriorityFilter] = useState('all');
 
     async function loadBootstrap() {
         setLoading(true);
@@ -215,6 +254,18 @@ function App() {
         }
     }
 
+    async function loadLoginActivity() {
+        setLoginActivityLoading(true);
+        try {
+            const response = await apiGet<{ data: LoginActivityItem[] }>('/aosai/v1/portal/login-activity', { per_page: 10 });
+            setLoginActivity(Array.isArray(response?.data) ? response.data : []);
+        } catch {
+            setLoginActivity([]);
+        } finally {
+            setLoginActivityLoading(false);
+        }
+    }
+
     useEffect(() => { loadBootstrap(); }, []);
     useEffect(() => {
         const enablePwa = runtime.branding?.enable_pwa;
@@ -226,6 +277,11 @@ function App() {
             loadTickets();
         }
     }, [activeView, ticketSearch, ticketStatusFilter, ticketDepartmentFilter, data?.user?.id]);
+    useEffect(() => {
+        if (activeView === 'profile' && data) {
+            loadLoginActivity();
+        }
+    }, [activeView, data?.user?.id]);
 
     const styles = useMemo(() => {
         const primary = data?.branding.primary_color || runtime.branding?.primary_color || '#0f766e';
@@ -241,6 +297,44 @@ function App() {
         data?.branding.terms_url ? { label: 'Terms', href: data.branding.terms_url } : null,
     ].filter(Boolean) as Array<{ label: string; href: string }>;
     const footerCredit = (data?.branding.footer_credit_text || '').trim();
+    const taskProjects = useMemo(() => {
+        const labels = new Set<string>();
+        (data?.tasks || []).forEach((task) => {
+            if (task.project_name) {
+                labels.add(task.project_name);
+            }
+        });
+        return Array.from(labels).sort((left, right) => left.localeCompare(right));
+    }, [data?.tasks]);
+    const filteredTasks = useMemo(() => {
+        return (data?.tasks || []).filter((task) => {
+            const matchesSearch = taskSearch.trim() === '' || `${task.title} ${task.task_list_name || ''} ${task.project_name || ''}`.toLowerCase().includes(taskSearch.trim().toLowerCase());
+            const matchesProject = taskProjectFilter === 'all' || (task.project_name || '') === taskProjectFilter;
+            const matchesPriority = taskPriorityFilter === 'all' || task.priority === taskPriorityFilter;
+            return matchesSearch && matchesProject && matchesPriority;
+        });
+    }, [data?.tasks, taskPriorityFilter, taskProjectFilter, taskSearch]);
+    const taskMetrics = useMemo(() => {
+        const overdue = filteredTasks.filter((task) => !!task.is_overdue && normalizeTaskStatus(task.status) !== 'completed').length;
+        const completed = filteredTasks.filter((task) => normalizeTaskStatus(task.status) === 'completed').length;
+        const active = filteredTasks.length - completed - overdue;
+        return { total: filteredTasks.length, overdue, completed, active };
+    }, [filteredTasks]);
+    const tasksByStatus = useMemo(() => {
+        const grouped: Record<string, Task[]> = {};
+        TASK_KANBAN_COLUMNS.forEach((column) => {
+            grouped[column.id] = [];
+        });
+
+        filteredTasks.forEach((task) => {
+            const status = normalizeTaskStatus(task.status);
+            const bucket = task.is_overdue && status !== 'completed' ? 'overdue' : status;
+            grouped[bucket] = grouped[bucket] || [];
+            grouped[bucket].push({ ...task, status: bucket });
+        });
+
+        return grouped;
+    }, [filteredTasks]);
 
     async function handleCreateTicket(e: React.FormEvent) {
         e.preventDefault();
@@ -266,6 +360,43 @@ function App() {
             await loadTickets();
         } catch (err: any) {
             alert(err.message || 'Unable to update the ticket.');
+        }
+    }
+
+    async function handleTaskStatus(taskId: number, status: string) {
+        if (status === 'overdue') {
+            return;
+        }
+
+        const nextStatus = normalizeTaskStatus(status);
+        const previousTasks = data?.tasks || [];
+
+        setMovingTaskId(taskId);
+        setData((prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                tasks: prev.tasks.map((task) => task.id === taskId ? { ...task, status: nextStatus } : task),
+            };
+        });
+
+        try {
+            const updated = await apiPut<Task>(`/aosai/v1/tasks/${taskId}/status`, { status: nextStatus });
+            setData((prev) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    tasks: prev.tasks.map((task) => task.id === taskId ? { ...task, ...updated, status: normalizeTaskStatus(updated?.status || nextStatus) } : task),
+                };
+            });
+        } catch (err: any) {
+            setData((prev) => {
+                if (!prev) return prev;
+                return { ...prev, tasks: previousTasks };
+            });
+            alert(err.message || 'Unable to update task status.');
+        } finally {
+            setMovingTaskId(null);
         }
     }
 
@@ -595,22 +726,126 @@ function App() {
                         )}
 
                         {activeView === 'tasks' && (
-                            <div className="grid gap-4 xl:grid-cols-2">
-                                {data.tasks.map((task) => (
-                                    <div key={task.id} className="rounded-[26px] border border-white/70 bg-white/90 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <h3 className="text-lg font-semibold text-slate-900">{task.title}</h3>
-                                                <p className="mt-1 text-sm text-slate-500">{task.project_name || 'Workspace'} - {task.task_list_name || 'Task list'}</p>
-                                            </div>
-                                            <span className={`rounded-full border px-3 py-1 text-xs ${tone(task.status)}`}>{statusLabel(task.status)}</span>
+                            <div className="space-y-4">
+                                <div className="rounded-[28px] border border-white/70 bg-white/95 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Kanban</p>
+                                    <h3 className="mt-2 text-xl font-semibold text-slate-900">My task board</h3>
+                                    <p className="mt-1 text-sm text-slate-500">Search work, narrow it by project or priority, and move delivery forward with a clean board view.</p>
+                                    <div className="mt-5 grid gap-3 md:grid-cols-4">
+                                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Visible Tasks</p>
+                                            <p className="mt-2 text-2xl font-semibold text-slate-900">{taskMetrics.total}</p>
                                         </div>
-                                        <div className="mt-4 flex items-center justify-between text-sm">
-                                            <span className={priorityTone(task.priority)}>{task.priority} priority</span>
-                                            <span className="text-slate-500">Due: {formatDateLabel(task.due_date, 'No due date')}</span>
+                                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Active</p>
+                                            <p className="mt-2 text-2xl font-semibold text-slate-900">{taskMetrics.active}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Completed</p>
+                                            <p className="mt-2 text-2xl font-semibold text-emerald-600">{taskMetrics.completed}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Overdue</p>
+                                            <p className="mt-2 text-2xl font-semibold text-rose-600">{taskMetrics.overdue}</p>
                                         </div>
                                     </div>
-                                ))}
+                                    <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_.85fr_.85fr]">
+                                        <input
+                                            type="search"
+                                            value={taskSearch}
+                                            onChange={(event) => setTaskSearch(event.target.value)}
+                                            placeholder="Search tasks, projects, or lists"
+                                            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700"
+                                        />
+                                        <select
+                                            value={taskProjectFilter}
+                                            onChange={(event) => setTaskProjectFilter(event.target.value)}
+                                            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700"
+                                        >
+                                            <option value="all">All projects</option>
+                                            {taskProjects.map((projectName) => (
+                                                <option key={projectName} value={projectName}>{projectName}</option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            value={taskPriorityFilter}
+                                            onChange={(event) => setTaskPriorityFilter(event.target.value)}
+                                            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700"
+                                        >
+                                            <option value="all">All priorities</option>
+                                            <option value="urgent">Urgent</option>
+                                            <option value="high">High</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="low">Low</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                {data.tasks.length === 0 ? (
+                                    <div className="rounded-[28px] border border-white/70 bg-white/90 px-6 py-10 text-center shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                        <p className="text-sm font-medium text-slate-900">No tasks are assigned yet.</p>
+                                        <p className="mt-2 text-sm text-slate-500">Assigned work will appear here in a Kanban workflow.</p>
+                                    </div>
+                                ) : filteredTasks.length === 0 ? (
+                                    <div className="rounded-[28px] border border-white/70 bg-white/90 px-6 py-10 text-center shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                        <p className="text-sm font-medium text-slate-900">No tasks match these filters.</p>
+                                        <p className="mt-2 text-sm text-slate-500">Adjust the search, project, or priority filter to bring work back into view.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-4 2xl:grid-cols-6 xl:grid-cols-3">
+                                        {TASK_KANBAN_COLUMNS.map((column) => (
+                                            <section
+                                                key={column.id}
+                                                onDragOver={(event) => event.preventDefault()}
+                                                onDrop={(event) => {
+                                                    event.preventDefault();
+                                                    if (column.id === 'overdue') return;
+                                                    if (!draggedTaskId) return;
+                                                    void handleTaskStatus(draggedTaskId, column.id);
+                                                    setDraggedTaskId(null);
+                                                }}
+                                                className="rounded-[26px] border border-white/70 bg-white/90 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{column.label}</p>
+                                                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500">{tasksByStatus[column.id]?.length || 0}</span>
+                                                </div>
+                                                <div className="mt-3 space-y-3">
+                                                    {(tasksByStatus[column.id] || []).map((task) => (
+                                                        <article
+                                                            key={task.id}
+                                                            draggable
+                                                            onDragStart={() => setDraggedTaskId(task.id)}
+                                                            onDragEnd={() => setDraggedTaskId(null)}
+                                                            className="cursor-move rounded-2xl border border-slate-200 bg-white px-3 py-3 transition hover:-translate-y-0.5"
+                                                        >
+                                                            <h4 className="text-sm font-semibold text-slate-900">{task.title}</h4>
+                                                            <p className="mt-1 text-xs text-slate-500">{task.project_name || 'Workspace'} - {task.task_list_name || 'Task list'}</p>
+                                                            <div className="mt-3 flex items-center justify-between text-xs">
+                                                                <span className={priorityTone(task.priority)}>{task.priority} priority</span>
+                                                                <span className="text-slate-500">Due {formatDateLabel(task.due_date, 'No date')}</span>
+                                                            </div>
+                                                            {task.is_overdue && normalizeTaskStatus(task.status) !== 'completed' ? (
+                                                                <div className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-medium text-rose-600">
+                                                                    Past due. Move this task forward or close it out.
+                                                                </div>
+                                                            ) : null}
+                                                            <select
+                                                                value={task.is_overdue && normalizeTaskStatus(task.status) !== 'completed' ? normalizeTaskStatus(task.status_raw || task.status) : normalizeTaskStatus(task.status)}
+                                                                onChange={(event) => void handleTaskStatus(task.id, event.target.value)}
+                                                                disabled={movingTaskId === task.id}
+                                                                className="mt-3 w-full rounded-xl border border-slate-200 px-2 py-2 text-xs text-slate-600 disabled:opacity-60"
+                                                            >
+                                                                {TASK_MUTABLE_COLUMNS.map((option) => (
+                                                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </article>
+                                                    ))}
+                                                </div>
+                                            </section>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -845,34 +1080,60 @@ function App() {
                         )}
 
                         {activeView === 'profile' && (
-                            <form onSubmit={handleProfileSave} className="rounded-[28px] border border-white/70 bg-white/95 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Profile</p>
-                                <h3 className="mt-2 text-2xl font-semibold text-slate-900">Manage your access details</h3>
-                                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                                    <input value={profileForm.first_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))} placeholder="First name" className="rounded-2xl border border-slate-200 px-4 py-3" />
-                                    <input value={profileForm.last_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))} placeholder="Last name" className="rounded-2xl border border-slate-200 px-4 py-3" />
-                                    <input value={profileForm.email} onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" />
-                                    <input type="password" value={profileForm.password} onChange={(e) => setProfileForm((prev) => ({ ...prev, password: e.target.value }))} placeholder="New password (optional)" className="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" />
-                                </div>
-                                <button disabled={profileSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
-                                    {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save profile
-                                </button>
-                            </form>
+                            <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
+                                <form onSubmit={handleProfileSave} className="rounded-[28px] border border-white/70 bg-white/95 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Profile</p>
+                                    <h3 className="mt-2 text-2xl font-semibold text-slate-900">Manage your access details</h3>
+                                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                                        <input value={profileForm.first_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))} placeholder="First name" className="rounded-2xl border border-slate-200 px-4 py-3" />
+                                        <input value={profileForm.last_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))} placeholder="Last name" className="rounded-2xl border border-slate-200 px-4 py-3" />
+                                        <input value={profileForm.email} onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" />
+                                        <input type="password" value={profileForm.password} onChange={(e) => setProfileForm((prev) => ({ ...prev, password: e.target.value }))} placeholder="New password (optional)" className="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" />
+                                    </div>
+                                    <button disabled={profileSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
+                                        {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save profile
+                                    </button>
+                                </form>
+                                <section className="rounded-[28px] border border-white/70 bg-white/95 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Security</p>
+                                            <h3 className="mt-2 text-xl font-semibold text-slate-900">Login activity</h3>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={loadLoginActivity}
+                                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                        >
+                                            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                                        </button>
+                                    </div>
+                                    <p className="mt-2 text-sm text-slate-500">Track recent access sessions for your account.</p>
+                                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                                        Current session IP: {data.session?.ip || 'Unavailable'} | Seen {data.session?.last_seen ? new Date(data.session.last_seen).toLocaleString() : 'just now'}
+                                    </div>
+                                    <div className="mt-4 space-y-2">
+                                        {loginActivityLoading ? (
+                                            <p className="text-xs text-slate-500">Loading login activity...</p>
+                                        ) : loginActivity.length === 0 ? (
+                                            <p className="text-xs text-slate-500">No recent login activity recorded yet.</p>
+                                        ) : loginActivity.map((item) => (
+                                            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                                                <p className="text-sm font-medium text-slate-900">{(item.user_name || item.user_login || 'User')} - {statusLabel(item.event_type, 'login success')}</p>
+                                                <p className="mt-1 text-xs text-slate-500">IP {item.ip_address || 'N/A'} | {item.created_at ? new Date(item.created_at).toLocaleString() : 'Unknown time'}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
                         )}
                     </section>
 
                     <footer className="mt-6 rounded-[28px] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)] backdrop-blur">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="space-y-1">
-                                <p className="text-sm font-medium text-slate-800">{data.branding.company_name || 'Agency OS AI'}</p>
-                                <p className="text-xs text-slate-500">
-                                    {data.branding.support_email ? (
-                                        <a href={`mailto:${data.branding.support_email}`} className="hover:text-slate-700">
-                                            {data.branding.support_email}
-                                        </a>
-                                    ) : 'Workspace support'}
-                                </p>
-                                {footerCredit ? <p className="text-xs text-slate-500">{footerCredit}</p> : null}
+                                <p className="text-sm font-medium text-slate-800"><a href="https://themefreex.com/product/agency-os-ai" target="_blank" rel="noreferrer" className="font-medium text-slate-700 hover:text-slate-900">Agency OS AI</a> | Open Source WordPress Project Management Tool</p>
+                                {/* {footerCredit ? <p className="text-xs text-slate-500">{footerCredit}</p> : null} */}
                                 <p className="text-xs text-slate-500">
                                     A product of <a href="https://themefreex.com" target="_blank" rel="noreferrer" className="font-medium text-slate-700 hover:text-slate-900">Themefreex</a> by <a href="https://codefreex.com" target="_blank" rel="noreferrer" className="font-medium text-slate-700 hover:text-slate-900">Codefreex</a>.
                                 </p>

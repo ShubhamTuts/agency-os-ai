@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class AOSAI_Activator {
-    public const DB_VERSION = '1.3.0';
+    public const DB_VERSION = '1.5.0';
 
     public static function activate() {
         self::install_schema();
@@ -28,6 +28,8 @@ class AOSAI_Activator {
         self::register_roles();
         self::add_capabilities();
         self::seed_default_departments();
+        self::seed_workflow_stages();
+        self::seed_email_templates();
 
         update_option( 'aosai_db_version', self::DB_VERSION );
     }
@@ -339,6 +341,159 @@ CREATE TABLE {$prefix}aosai_webhooks (
     PRIMARY KEY (id),
     KEY idx_active (is_active)
 ) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_login_activity (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+    user_login VARCHAR(60) NOT NULL DEFAULT '',
+    portal_type VARCHAR(20) NOT NULL DEFAULT 'team',
+    event_type VARCHAR(40) NOT NULL DEFAULT 'login_success',
+    ip_address VARCHAR(64) NOT NULL DEFAULT '',
+    user_agent TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_user_id (user_id),
+    KEY idx_event_type (event_type),
+    KEY idx_created_at (created_at)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_clients (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL DEFAULT '',
+    company_name VARCHAR(255) NULL,
+    email VARCHAR(190) NULL,
+    phone VARCHAR(50) NULL,
+    website VARCHAR(255) NULL,
+    address TEXT NULL,
+    city VARCHAR(100) NULL,
+    state VARCHAR(100) NULL,
+    country VARCHAR(100) NULL,
+    zip_code VARCHAR(20) NULL,
+    tax_id VARCHAR(50) NULL,
+    notes TEXT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    source VARCHAR(30) NOT NULL DEFAULT 'manual',
+    created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_status (status),
+    KEY idx_email (email),
+    KEY idx_created_by (created_by)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_client_users (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    client_id BIGINT(20) UNSIGNED NOT NULL,
+    user_id BIGINT(20) UNSIGNED NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'contact',
+    added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_client_user (client_id, user_id),
+    KEY idx_user_id (user_id)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_client_projects (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    client_id BIGINT(20) UNSIGNED NOT NULL,
+    project_id BIGINT(20) UNSIGNED NOT NULL,
+    linked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_client_project (client_id, project_id)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_invoices (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    invoice_number VARCHAR(50) NOT NULL,
+    client_id BIGINT(20) UNSIGNED NULL,
+    project_id BIGINT(20) UNSIGNED NULL,
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    description TEXT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    issue_date DATE NULL,
+    due_date DATE NULL,
+    paid_date DATE NULL,
+    notes TEXT NULL,
+    created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_invoice_number (invoice_number),
+    KEY idx_client_id (client_id),
+    KEY idx_project_id (project_id),
+    KEY idx_status (status),
+    KEY idx_due_date (due_date)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_invoice_items (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    invoice_id BIGINT(20) UNSIGNED NOT NULL,
+    description TEXT NOT NULL,
+    quantity DECIMAL(10,2) NOT NULL DEFAULT 1.00,
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    sort_order INT(11) NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_invoice_id (invoice_id)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_workflow_stages (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL DEFAULT '',
+    slug VARCHAR(100) NOT NULL DEFAULT '',
+    type VARCHAR(20) NOT NULL DEFAULT 'task',
+    color VARCHAR(7) NOT NULL DEFAULT '#6366f1',
+    icon VARCHAR(50) NULL,
+    sort_order INT(11) NOT NULL DEFAULT 0,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    is_completed TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_type (type),
+    KEY idx_sort_order (sort_order)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_email_templates (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(190) NOT NULL DEFAULT '',
+    slug VARCHAR(190) NOT NULL DEFAULT '',
+    type VARCHAR(30) NOT NULL DEFAULT 'general',
+    subject VARCHAR(500) NOT NULL DEFAULT '',
+    body LONGTEXT NOT NULL,
+    variables TEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_slug_type (slug, type)
+) {$charset_collate};
+
+CREATE TABLE {$prefix}aosai_time_entries (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    task_id BIGINT(20) UNSIGNED NULL,
+    project_id BIGINT(20) UNSIGNED NULL,
+    user_id BIGINT(20) UNSIGNED NOT NULL,
+    description TEXT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NULL,
+    duration INT(11) NOT NULL DEFAULT 0,
+    billable TINYINT(1) NOT NULL DEFAULT 1,
+    invoiced TINYINT(1) NOT NULL DEFAULT 0,
+    invoice_id BIGINT(20) UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_task_id (task_id),
+    KEY idx_project_id (project_id),
+    KEY idx_user_id (user_id),
+    KEY idx_invoiced (invoiced)
+) {$charset_collate};
 ";
 
         dbDelta( $sql );
@@ -385,6 +540,7 @@ CREATE TABLE {$prefix}aosai_webhooks (
             'aosai_ticket_ai_routing'          => 'yes',
             'aosai_ticket_default_priority'    => 'medium',
             'aosai_portal_dashboard_layout'    => 'split',
+            'aosai_login_tracking_enabled'     => 'yes',
             'aosai_smtp_enabled'           => 'no',
             'aosai_smtp_host'              => '',
             'aosai_smtp_port'              => 587,
@@ -541,5 +697,226 @@ CREATE TABLE {$prefix}aosai_webhooks (
             );
         }
     }
-}
 
+    private static function seed_workflow_stages() {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'aosai_workflow_stages';
+        $count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+        if ( $count > 0 ) {
+            return;
+        }
+
+        $stages = array(
+            array(
+                'name'         => 'Backlog',
+                'slug'         => 'backlog',
+                'type'         => 'task',
+                'color'        => '#64748b',
+                'icon'         => 'inbox',
+                'sort_order'   => 1,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'To Do',
+                'slug'         => 'todo',
+                'type'         => 'task',
+                'color'        => '#3b82f6',
+                'icon'         => 'list-todo',
+                'sort_order'   => 2,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'In Progress',
+                'slug'         => 'in_progress',
+                'type'         => 'task',
+                'color'        => '#f59e0b',
+                'icon'         => 'loader',
+                'sort_order'   => 3,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'In Review',
+                'slug'         => 'in_review',
+                'type'         => 'task',
+                'color'        => '#8b5cf6',
+                'icon'         => 'eye',
+                'sort_order'   => 4,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'Completed',
+                'slug'         => 'completed',
+                'type'         => 'task',
+                'color'        => '#10b981',
+                'icon'         => 'check-circle',
+                'sort_order'   => 5,
+                'is_default'   => 1,
+                'is_completed' => 1,
+            ),
+            array(
+                'name'         => 'Open',
+                'slug'         => 'open',
+                'type'         => 'ticket',
+                'color'        => '#3b82f6',
+                'icon'         => 'inbox',
+                'sort_order'   => 1,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'In Progress',
+                'slug'         => 'in_progress',
+                'type'         => 'ticket',
+                'color'        => '#f59e0b',
+                'icon'         => 'loader',
+                'sort_order'   => 2,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'Waiting',
+                'slug'         => 'waiting',
+                'type'         => 'ticket',
+                'color'        => '#6366f1',
+                'icon'         => 'clock',
+                'sort_order'   => 3,
+                'is_default'   => 1,
+                'is_completed' => 0,
+            ),
+            array(
+                'name'         => 'Resolved',
+                'slug'         => 'resolved',
+                'type'         => 'ticket',
+                'color'        => '#10b981',
+                'icon'         => 'check-circle',
+                'sort_order'   => 4,
+                'is_default'   => 1,
+                'is_completed' => 1,
+            ),
+            array(
+                'name'         => 'Closed',
+                'slug'         => 'closed',
+                'type'         => 'ticket',
+                'color'        => '#64748b',
+                'icon'         => 'archive',
+                'sort_order'   => 5,
+                'is_default'   => 1,
+                'is_completed' => 1,
+            ),
+        );
+
+        foreach ( $stages as $stage ) {
+            $wpdb->insert(
+                $table,
+                $stage,
+                array( '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s' )
+            );
+        }
+    }
+
+    private static function seed_email_templates() {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'aosai_email_templates';
+        $count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+        if ( $count > 0 ) {
+            return;
+        }
+
+        $templates = array(
+            array(
+                'name'       => 'Task Assigned',
+                'slug'       => 'task_assigned',
+                'type'       => 'task',
+                'subject'    => '[{{project_name}}] New task assigned: {{task_title}}',
+                'body'       => "Hello {{assignee_name}},\n\nA new task has been assigned to you:\n\n**Task:** {{task_title}}\n**Project:** {{project_name}}\n**Due Date:** {{task_due_date}}\n**Priority:** {{task_priority}}\n\n{{task_description}}\n\nView task: {{task_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'assignee_name', 'task_title', 'project_name', 'task_due_date', 'task_priority', 'task_description', 'task_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Task Completed',
+                'slug'       => 'task_completed',
+                'type'       => 'task',
+                'subject'    => '[{{project_name}}] Task completed: {{task_title}}',
+                'body'       => "Hello {{task_assigner_name}},\n\nGreat news! The following task has been marked as completed:\n\n**Task:** {{task_title}}\n**Project:** {{project_name}}\n**Completed By:** {{completed_by_name}}\n**Completed At:** {{completed_at}}\n\nView task: {{task_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'task_assigner_name', 'task_title', 'project_name', 'completed_by_name', 'completed_at', 'task_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Ticket Created',
+                'slug'       => 'ticket_created',
+                'type'       => 'ticket',
+                'subject'    => '[#{{ticket_id}}] New support request: {{ticket_subject}}',
+                'body'       => "Hello {{assignee_name}},\n\nA new support ticket has been submitted:\n\n**Subject:** {{ticket_subject}}\n**Priority:** {{ticket_priority}}\n**Department:** {{department_name}}\n**Submitted By:** {{ticket_requester}}\n\n**Description:**\n{{ticket_content}}\n\nView ticket: {{ticket_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'assignee_name', 'ticket_id', 'ticket_subject', 'ticket_priority', 'department_name', 'ticket_requester', 'ticket_content', 'ticket_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Ticket Updated',
+                'slug'       => 'ticket_updated',
+                'type'       => 'ticket',
+                'subject'    => '[#{{ticket_id}}] Ticket updated: {{ticket_subject}}',
+                'body'       => "Hello {{ticket_requester}},\n\nYour support ticket has been updated:\n\n**Subject:** {{ticket_subject}}\n**New Status:** {{ticket_status}}\n\n**Update:**\n{{ticket_note}}\n\nView ticket: {{ticket_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'ticket_requester', 'ticket_id', 'ticket_subject', 'ticket_status', 'ticket_note', 'ticket_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Project Created',
+                'slug'       => 'project_created',
+                'type'       => 'project',
+                'subject'    => 'New project created: {{project_name}}',
+                'body'       => "Hello {{member_name}},\n\nA new project has been created and you have been added as a team member:\n\n**Project:** {{project_name}}\n**Start Date:** {{project_start_date}}\n**Due Date:** {{project_end_date}}\n\n{{project_description}}\n\nView project: {{project_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'member_name', 'project_name', 'project_start_date', 'project_end_date', 'project_description', 'project_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Milestone Due Soon',
+                'slug'       => 'milestone_due_soon',
+                'type'       => 'milestone',
+                'subject'    => '[{{project_name}}] Milestone due soon: {{milestone_name}}',
+                'body'       => "Hello {{member_name}},\n\nA milestone is approaching its due date:\n\n**Milestone:** {{milestone_name}}\n**Project:** {{project_name}}\n**Due Date:** {{milestone_due_date}}\n\nView milestone: {{milestone_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'member_name', 'milestone_name', 'project_name', 'milestone_due_date', 'milestone_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Invoice Created',
+                'slug'       => 'invoice_created',
+                'type'       => 'invoice',
+                'subject'    => 'Invoice #{{invoice_number}} from {{company_name}}',
+                'body'       => "Dear {{client_name}},\n\nPlease find attached invoice #{{invoice_number}}.\n\n**Issue Date:** {{invoice_issue_date}}\n**Due Date:** {{invoice_due_date}}\n**Amount:** {{invoice_amount}}\n\n{{invoice_description}}\n\nView invoice: {{invoice_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'client_name', 'invoice_number', 'company_name', 'invoice_issue_date', 'invoice_due_date', 'invoice_amount', 'invoice_description', 'invoice_url' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+            array(
+                'name'       => 'Invoice Payment Reminder',
+                'slug'       => 'invoice_reminder',
+                'type'       => 'invoice',
+                'subject'    => 'Payment Reminder: Invoice #{{invoice_number}} due {{invoice_due_date}}',
+                'body'       => "Dear {{client_name}},\n\nThis is a friendly reminder that invoice #{{invoice_number}} is due on {{invoice_due_date}}.\n\n**Amount Due:** {{invoice_amount}}\n\nPlease arrange payment at your earliest convenience.\n\nView invoice: {{invoice_url}}\n\nBest regards,\n{{company_name}}",
+                'variables'  => json_encode( array( 'client_name', 'invoice_number', 'invoice_due_date', 'invoice_amount', 'invoice_url', 'company_name' ) ),
+                'is_active'  => 1,
+                'is_default' => 1,
+            ),
+        );
+
+        foreach ( $templates as $template ) {
+            $wpdb->insert(
+                $table,
+                $template,
+                array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s' )
+            );
+        }
+    }
+}

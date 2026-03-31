@@ -4,6 +4,7 @@ import { getBrandLogo } from '../../utils/branding';
 import {
     LayoutDashboard, FolderKanban, Target,
     MessageSquare, FileText, BarChart3, Users, Settings,
+    Building2, Clock,
     Sparkles, ChevronLeft, ChevronRight,
     LucideIcon
 } from 'lucide-react';
@@ -16,6 +17,9 @@ interface SidebarProps {
 const navItems: Array<{ to?: string; icon?: LucideIcon; label: string; divider?: boolean }> = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects', icon: FolderKanban, label: 'Projects' },
+    { to: '/clients', icon: Building2, label: 'Clients' },
+    { to: '/invoices', icon: FileText, label: 'Invoices' },
+    { to: '/time-tracking', icon: Clock, label: 'Time Tracking' },
     { to: '/milestones', icon: Target, label: 'Milestones' },
     { to: '/messages', icon: MessageSquare, label: 'Messages' },
     { to: '/files', icon: FileText, label: 'Files' },
