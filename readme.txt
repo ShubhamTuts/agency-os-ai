@@ -30,8 +30,16 @@ Manage projects, tasks, files, support tickets, client access, employee access, 
 
 - Modern React-powered WordPress project manager dashboard
 - Projects, task lists, tasks, milestones, messages, and file management
+- Dynamic workflow stages for richer task and ticket pipelines
+- Built-in time tracking with manual entry and timer-based capture
 - Team performance visibility in the reports screen
 - Profile and settings management for every team member
+
+**Client and billing operations**
+
+- Client management with company profiles, contacts, and project linking
+- Invoice management with line items, tax totals, send action, and print-to-PDF view
+- Free access to clients, invoices, and time tracking directly inside the admin workspace
 
 **Branded client portal**
 
@@ -106,9 +114,9 @@ The free core covers the operational foundation. Agencies who want to scale fast
 
 **Billing and revenue**
 
-- Time tracking and billing overlays on projects and tasks
-- Automated invoicing and payment workflows
+- Payment collection workflows
 - Stripe payment gateway integration
+- Deeper billing automation and revenue reporting
 
 **Deeper integrations**
 

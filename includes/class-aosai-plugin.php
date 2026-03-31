@@ -50,14 +50,8 @@ class AOSAI_Plugin {
             'projects', 'tasks', 'task-lists', 'milestones', 'messages',
             'comments', 'files', 'activities', 'ai', 'settings', 'users', 'reports', 'profile',
             'portal', 'tickets', 'departments', 'tags', 'webhooks', 'inbound',
+            'clients', 'invoices', 'time-entries',
         );
-
-        if ( aosai_is_pro_active() ) {
-            $controllers = array_merge(
-                $controllers,
-                array( 'clients', 'invoices', 'time-entries' )
-            );
-        }
         foreach ( $controllers as $ctrl ) {
             require_once AOSAI_PLUGIN_DIR . "includes/api/class-aosai-rest-{$ctrl}.php";
         }
@@ -111,18 +105,10 @@ class AOSAI_Plugin {
             new AOSAI_REST_Tags(),
             new AOSAI_REST_Webhooks(),
             new AOSAI_REST_Inbound(),
+            new AOSAI_REST_Clients(),
+            new AOSAI_REST_Invoices(),
+            new AOSAI_REST_Time_Entries(),
         );
-
-        if ( aosai_is_pro_active() ) {
-            $controllers = array_merge(
-                $controllers,
-                array(
-                    new AOSAI_REST_Clients(),
-                    new AOSAI_REST_Invoices(),
-                    new AOSAI_REST_Time_Entries(),
-                )
-            );
-        }
 
         foreach ( $controllers as $controller ) {
             $controller->register_routes();

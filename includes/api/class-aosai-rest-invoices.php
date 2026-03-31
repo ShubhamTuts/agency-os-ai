@@ -79,6 +79,18 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
             'callback'            => array( $this, 'get_line_items' ),
             'permission_callback' => array( $this, 'get_item_permissions_check' ),
         ) );
+
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/(?P<id>\d+)/send', array(
+            'methods'             => \WP_REST_Server::CREATABLE,
+            'callback'            => array( $this, 'send_invoice' ),
+            'permission_callback' => array( $this, 'update_item_permissions_check' ),
+        ) );
+
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/(?P<id>\d+)/pdf', array(
+            'methods'             => \WP_REST_Server::READABLE,
+            'callback'            => array( $this, 'render_invoice_pdf_view' ),
+            'permission_callback' => array( $this, 'get_item_permissions_check' ),
+        ) );
     }
     
     public function get_items_permissions_check( $request ) {
@@ -217,6 +229,130 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
         
         return new \WP_REST_Response( $items, 200 );
     }
+
+    public function send_invoice( $request ) {
+        $invoice = AOSAI_Invoice::get_instance()->get( (int) $request->get_param( 'id' ) );
+
+        if ( ! $invoice ) {
+            return new \WP_Error( 'rest_invoice_invalid_id', __( 'Invalid invoice ID.', 'agency-os-ai' ), array( 'status' => 404 ) );
+        }
+
+        $client_email = sanitize_email( (string) ( $invoice['client']['email'] ?? '' ) );
+        if ( '' === $client_email ) {
+            return new \WP_Error( 'rest_invoice_missing_email', __( 'This invoice does not have a client email address.', 'agency-os-ai' ), array( 'status' => 400 ) );
+        }
+
+        $subject = sprintf( __( 'Invoice %s from %s', 'agency-os-ai' ), $invoice['invoice_number'], get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) );
+        $body    = sprintf(
+            __( "Hello,\n\nYour invoice %1\$s is ready.\nTotal: %2\$s\nDue date: %3\$s\n\nYou can review it here:\n%4\$s", 'agency-os-ai' ),
+            $invoice['invoice_number'],
+            wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
+            ! empty( $invoice['due_date'] ) ? $invoice['due_date'] : __( 'No due date set', 'agency-os-ai' ),
+            rest_url( $this->namespace . '/' . $this->rest_base . '/' . (int) $invoice['id'] . '/pdf' )
+        );
+
+        $headers = array(
+            'Content-Type: text/plain; charset=UTF-8',
+            'From: ' . get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) . ' <' . sanitize_email( (string) get_option( 'aosai_sender_email', get_option( 'admin_email' ) ) ) . '>',
+        );
+
+        $sent = wp_mail( $client_email, $subject, $body, $headers );
+        if ( ! $sent ) {
+            return new \WP_Error( 'rest_invoice_send_failed', __( 'The invoice email could not be sent.', 'agency-os-ai' ), array( 'status' => 500 ) );
+        }
+
+        AOSAI_Invoice::get_instance()->update( (int) $invoice['id'], array( 'status' => 'pending' ) );
+
+        return new \WP_REST_Response(
+            array(
+                'success' => true,
+                'message' => __( 'Invoice sent successfully.', 'agency-os-ai' ),
+            ),
+            200
+        );
+    }
+
+    public function render_invoice_pdf_view( $request ) {
+        $invoice = AOSAI_Invoice::get_instance()->get( (int) $request->get_param( 'id' ) );
+
+        if ( ! $invoice ) {
+            return new \WP_Error( 'rest_invoice_invalid_id', __( 'Invalid invoice ID.', 'agency-os-ai' ), array( 'status' => 404 ) );
+        }
+
+        $line_items = is_array( $invoice['line_items'] ?? null ) ? $invoice['line_items'] : array();
+        $company    = get_option( 'aosai_company_name', get_bloginfo( 'name' ) );
+        $client     = (string) ( $invoice['client_name'] ?? '' );
+        $currency   = (string) ( $invoice['currency'] ?? 'USD' );
+        $subtotal   = $this->format_money( (float) ( $invoice['subtotal'] ?? 0 ), $currency );
+        $tax        = $this->format_money( (float) ( $invoice['tax_amount'] ?? 0 ), $currency );
+        $total      = $this->format_money( (float) ( $invoice['total'] ?? 0 ), $currency );
+
+        ob_start();
+        ?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title><?php echo esc_html( $invoice['invoice_number'] ); ?></title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #0f172a; }
+        h1, h2, h3, p { margin: 0 0 12px; }
+        .meta, .totals { margin-top: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; text-align: left; }
+        .summary { margin-top: 30px; margin-left: auto; width: 320px; }
+        .summary td { border: 0; padding: 6px 8px; }
+        .summary tr:last-child td { font-weight: 700; border-top: 2px solid #0f172a; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1><?php echo esc_html( $company ); ?></h1>
+    <h2><?php echo esc_html( sprintf( __( 'Invoice %s', 'agency-os-ai' ), $invoice['invoice_number'] ) ); ?></h2>
+    <div class="meta">
+        <p><strong><?php esc_html_e( 'Client:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( $client ?: __( 'Unassigned client', 'agency-os-ai' ) ); ?></p>
+        <p><strong><?php esc_html_e( 'Issue date:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( (string) ( $invoice['issue_date'] ?? '' ) ); ?></p>
+        <p><strong><?php esc_html_e( 'Due date:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( (string) ( $invoice['due_date'] ?? '' ) ); ?></p>
+        <p><strong><?php esc_html_e( 'Status:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( ucfirst( (string) ( $invoice['status_label'] ?? $invoice['status'] ?? 'draft' ) ) ); ?></p>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th><?php esc_html_e( 'Description', 'agency-os-ai' ); ?></th>
+                <th><?php esc_html_e( 'Quantity', 'agency-os-ai' ); ?></th>
+                <th><?php esc_html_e( 'Rate', 'agency-os-ai' ); ?></th>
+                <th><?php esc_html_e( 'Amount', 'agency-os-ai' ); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ( $line_items as $item ) : ?>
+                <tr>
+                    <td><?php echo esc_html( (string) ( $item['description'] ?? '' ) ); ?></td>
+                    <td><?php echo esc_html( (string) ( $item['quantity'] ?? '' ) ); ?></td>
+                    <td><?php echo esc_html( $this->format_money( (float) ( $item['unit_price'] ?? 0 ), $currency ) ); ?></td>
+                    <td><?php echo esc_html( $this->format_money( (float) ( $item['amount'] ?? 0 ), $currency ) ); ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <table class="summary">
+        <tr><td><?php esc_html_e( 'Subtotal', 'agency-os-ai' ); ?></td><td><?php echo esc_html( $subtotal ); ?></td></tr>
+        <tr><td><?php echo esc_html( sprintf( __( 'Tax (%s%%)', 'agency-os-ai' ), (string) ( $invoice['tax_rate'] ?? 0 ) ) ); ?></td><td><?php echo esc_html( $tax ); ?></td></tr>
+        <tr><td><?php esc_html_e( 'Total', 'agency-os-ai' ); ?></td><td><?php echo esc_html( $total ); ?></td></tr>
+    </table>
+    <?php if ( ! empty( $invoice['notes'] ) ) : ?>
+        <div class="totals">
+            <h3><?php esc_html_e( 'Notes', 'agency-os-ai' ); ?></h3>
+            <p><?php echo nl2br( esc_html( (string) $invoice['notes'] ) ); ?></p>
+        </div>
+    <?php endif; ?>
+</body>
+</html>
+        <?php
+
+        $html = (string) ob_get_clean();
+
+        return new \WP_REST_Response( $html, 200, array( 'Content-Type' => 'text/html; charset=' . get_bloginfo( 'charset' ) ) );
+    }
     
     public function get_collection_params() {
         return array(
@@ -319,5 +455,21 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
         }
 
         return $data;
+    }
+
+    private function format_invoice_total( array $invoice ): string {
+        return $this->format_money( (float) ( $invoice['total'] ?? $invoice['total_amount'] ?? 0 ), (string) ( $invoice['currency'] ?? 'USD' ) );
+    }
+
+    private function format_money( float $amount, string $currency ): string {
+        if ( class_exists( 'NumberFormatter' ) ) {
+            $formatter = new \NumberFormatter( get_locale(), \NumberFormatter::CURRENCY );
+            $result = $formatter->formatCurrency( $amount, $currency );
+            if ( false !== $result ) {
+                return $result;
+            }
+        }
+
+        return $currency . ' ' . number_format_i18n( $amount, 2 );
     }
 }

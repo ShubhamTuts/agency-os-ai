@@ -38,6 +38,7 @@ interface Client {
 }
 
 export default function Invoices() {
+    const apiBase = ((window as any).aosaiData?.apiBase || '/wp-json').replace(/\/$/, '');
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
@@ -151,7 +152,7 @@ export default function Invoices() {
 
     async function handleMarkPaid(invoice: Invoice) {
         try {
-            const res = await apiPut<Invoice>(`/aosai/v1/invoices/${invoice.id}`, { status: 'paid' });
+            const res = await apiPost<Invoice>(`/aosai/v1/invoices/${invoice.id}/mark-paid`, {});
             setInvoices(prev => prev.map(i => i.id === res.id ? res : i));
         } catch (err: any) {
             alert(err.message);
@@ -302,7 +303,7 @@ export default function Invoices() {
                                                         <button onClick={() => handleMarkPaid(invoice)} className="w-full px-3 py-2 text-left text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-2">
                                                             <CheckCircle className="w-3 h-3" /> Mark Paid
                                                         </button>
-                                                        <button onClick={() => { window.open(`/api/aosai/v1/invoices/${invoice.id}/pdf`, '_blank'); setMenuOpen(null); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                                                        <button onClick={() => { window.open(`${apiBase}/aosai/v1/invoices/${invoice.id}/pdf`, '_blank'); setMenuOpen(null); }} className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
                                                             <Download className="w-3 h-3" /> Download PDF
                                                         </button>
                                                         <button onClick={() => handleDelete(invoice.id)} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
