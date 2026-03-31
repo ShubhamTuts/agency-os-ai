@@ -71,6 +71,7 @@ class AOSAI_Plugin {
         $this->loader->add_action( 'wp_head', $frontend, 'print_pwa_meta' );
         $this->loader->add_action( 'wp_head', $frontend, 'output_modulepreload_hints' );
         $this->loader->add_filter( 'show_admin_bar', $frontend, 'maybe_hide_admin_bar' );
+        $this->loader->add_filter( 'template_include', $frontend, 'maybe_serve_portal_template' );
     }
 
     private function define_api_hooks() {

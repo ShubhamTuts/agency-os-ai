@@ -336,6 +336,13 @@ class AOSAI_Frontend {
         return (string) ob_get_clean();
     }
 
+    public function maybe_serve_portal_template( $template ) {
+        if ( ! $this->is_portal_page_request() ) {
+            return $template;
+        }
+        return AOSAI_PLUGIN_DIR . 'templates/portal-fullpage.php';
+    }
+
     private function is_portal_page_request(): bool {
         if ( ! is_singular() ) {
             return false;
