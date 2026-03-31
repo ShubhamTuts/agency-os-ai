@@ -10,8 +10,10 @@ import {
     Loader2,
     LogOut,
     Mail,
+    RefreshCw,
     Save,
     Send,
+    Sparkles,
     UserCircle2,
     ClipboardList,
 } from 'lucide-react';
@@ -41,8 +43,28 @@ declare global {
 
 interface Tag { id: number; name: string; color: string; }
 interface UserProfile { id: number; first_name?: string; last_name?: string; display_name?: string; name?: string; email: string; avatar_url?: string; roles?: string[]; portal_type?: string; }
-interface Project { id: number; name: string; description?: string; status?: string; progress?: number; due_date?: string; owner_name?: string; member_count?: number; tags?: Tag[]; }
-interface Task { id: number; title: string; status: string; priority: string; due_date?: string; project_name?: string; task_list_name?: string; tags?: Tag[]; }
+interface MilestonePreview { id: number; name: string; status?: string; due_date?: string; progress?: number; task_count?: number; completed_task_count?: number; }
+interface ProjectStats { total_tasks?: number; completed_tasks?: number; overdue_tasks?: number; total_milestones?: number; completed_milestones?: number; }
+interface Task { id: number; title: string; status: string; priority: string; due_date?: string; project_name?: string; task_list_name?: string; tags?: Tag[]; is_private?: number; }
+interface Project {
+    id: number;
+    name: string;
+    description?: string;
+    status?: string;
+    progress?: number;
+    due_date?: string;
+    owner_name?: string;
+    member_count?: number;
+    tags?: Tag[];
+    stats?: ProjectStats;
+    task_preview?: Task[];
+    milestone_preview?: MilestonePreview[];
+    next_milestone?: MilestonePreview | null;
+    open_task_count?: number;
+    visible_task_count?: number;
+    visible_completed_task_count?: number;
+    milestone_count?: number;
+}
 interface TicketNote { id: number; content: string; author_name?: string; user_name?: string; created_at?: string; }
 interface Ticket { id: number; subject: string; content: string; status: string; priority: string; project_name?: string; department_name?: string; department_id?: number; assignee_name?: string; ai_summary?: string; tags?: Tag[]; notes?: TicketNote[]; notes_count?: number; created_at?: string; }
 interface MessageItem { id: number; title?: string; content: string; project_name?: string; author_name?: string; created_at?: string; }
@@ -65,6 +87,16 @@ interface Branding {
     footer_credit_text?: string;
 }
 interface NavItem { id: string; label: string; }
+interface TicketAssistResult {
+    source: 'ai' | 'fallback';
+    department_id?: number;
+    department_name?: string;
+    priority: string;
+    summary: string;
+    first_response: string;
+    tags: string[];
+    message?: string;
+}
 interface PortalBootstrap {
     user: UserProfile;
     branding: Branding;
@@ -106,6 +138,17 @@ function priorityTone(priority: string) {
     }
 }
 
+function formatDateLabel(value?: string, fallback = 'Open timeline') {
+    if (!value) return fallback;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString();
+}
+
+function statusLabel(value?: string, fallback = 'active') {
+    return (value || fallback).replace(/_/g, ' ');
+}
+
 function StatCard({ label, value, help }: { label: string; value: number; help: string }) {
     return (
         <div className="rounded-[24px] border border-white/60 bg-white/90 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -125,9 +168,18 @@ function App() {
     const [profileSaving, setProfileSaving] = useState(false);
     const [ticketNoteSavingId, setTicketNoteSavingId] = useState<number | null>(null);
     const [expandedTickets, setExpandedTickets] = useState<number[]>([]);
+    const [expandedProjects, setExpandedProjects] = useState<number[]>([]);
     const [ticketNoteDrafts, setTicketNoteDrafts] = useState<Record<number, string>>({});
-    const [ticketForm, setTicketForm] = useState({ subject: '', content: '', department_id: '', project_id: '', priority: 'medium', tags: '' });
+    const [ticketForm, setTicketForm] = useState({ subject: '', content: '', department_id: '', project_id: '', priority: 'medium', tags: '', ai_summary: '' });
     const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', email: '', password: '' });
+    const [ticketList, setTicketList] = useState<Ticket[]>([]);
+    const [ticketListLoading, setTicketListLoading] = useState(false);
+    const [ticketListLoaded, setTicketListLoaded] = useState(false);
+    const [ticketSearch, setTicketSearch] = useState('');
+    const [ticketStatusFilter, setTicketStatusFilter] = useState('');
+    const [ticketDepartmentFilter, setTicketDepartmentFilter] = useState('');
+    const [ticketAssistLoading, setTicketAssistLoading] = useState(false);
+    const [ticketAssist, setTicketAssist] = useState<TicketAssistResult | null>(null);
 
     async function loadBootstrap() {
         setLoading(true);
@@ -135,6 +187,8 @@ function App() {
         try {
             const response = await apiGet<PortalBootstrap>('/aosai/v1/portal/bootstrap');
             setData(response);
+            setTicketList(Array.isArray(response.tickets) ? response.tickets : []);
+            setTicketListLoaded(false);
             setProfileForm({ first_name: response.user.first_name || '', last_name: response.user.last_name || '', email: response.user.email || '', password: '' });
             if (runtime.initialView) setActiveView(runtime.initialView);
         } catch (err: any) {
@@ -144,12 +198,34 @@ function App() {
         }
     }
 
+    async function loadTickets() {
+        setTicketListLoading(true);
+        try {
+            const params: Record<string, string | number> = { page: 1, per_page: 50 };
+            if (ticketSearch.trim()) params.search = ticketSearch.trim();
+            if (ticketStatusFilter) params.status = ticketStatusFilter;
+            if (ticketDepartmentFilter) params.department_id = Number(ticketDepartmentFilter);
+            const response = await apiGet<Ticket[]>('/aosai/v1/tickets', params);
+            setTicketList(Array.isArray(response) ? response : []);
+        } catch {
+            setTicketList([]);
+        } finally {
+            setTicketListLoaded(true);
+            setTicketListLoading(false);
+        }
+    }
+
     useEffect(() => { loadBootstrap(); }, []);
     useEffect(() => {
         const enablePwa = runtime.branding?.enable_pwa;
         if (!enablePwa || !runtime.serviceWorkerUrl || !('serviceWorker' in navigator)) return;
         navigator.serviceWorker.register(runtime.serviceWorkerUrl).catch(() => undefined);
     }, []);
+    useEffect(() => {
+        if (activeView === 'tickets' && data) {
+            loadTickets();
+        }
+    }, [activeView, ticketSearch, ticketStatusFilter, ticketDepartmentFilter, data?.user?.id]);
 
     const styles = useMemo(() => {
         const primary = data?.branding.primary_color || runtime.branding?.primary_color || '#0f766e';
@@ -158,6 +234,7 @@ function App() {
     }, [data]);
     const brandLogo = data?.branding.company_logo_url || runtime.branding?.company_logo_url || getBrandLogo();
     const animatedLogo = getAnimatedBrandLogo(brandLogo);
+    const displayedTickets = ticketListLoaded ? ticketList : (data?.tickets || []);
     const footerLinks = [
         data?.branding.company_website ? { label: 'Website', href: data.branding.company_website } : null,
         data?.branding.privacy_policy_url ? { label: 'Privacy Policy', href: data.branding.privacy_policy_url } : null,
@@ -169,10 +246,12 @@ function App() {
         e.preventDefault();
         setTicketSaving(true);
         try {
-            await apiPost('/aosai/v1/tickets', { subject: ticketForm.subject, content: ticketForm.content, department_id: ticketForm.department_id ? Number(ticketForm.department_id) : undefined, project_id: ticketForm.project_id ? Number(ticketForm.project_id) : undefined, priority: ticketForm.priority, tags: ticketForm.tags });
-            setTicketForm({ subject: '', content: '', department_id: '', project_id: '', priority: 'medium', tags: '' });
+            await apiPost('/aosai/v1/tickets', { subject: ticketForm.subject, content: ticketForm.content, department_id: ticketForm.department_id ? Number(ticketForm.department_id) : undefined, project_id: ticketForm.project_id ? Number(ticketForm.project_id) : undefined, priority: ticketForm.priority, tags: ticketForm.tags, ai_summary: ticketForm.ai_summary });
+            setTicketForm({ subject: '', content: '', department_id: '', project_id: '', priority: 'medium', tags: '', ai_summary: '' });
+            setTicketAssist(null);
             setActiveView('tickets');
             await loadBootstrap();
+            await loadTickets();
         } catch (err: any) {
             alert(err.message || 'Unable to create ticket.');
         } finally {
@@ -184,13 +263,46 @@ function App() {
         try {
             await apiPut(`/aosai/v1/tickets/${ticketId}`, { status });
             await loadBootstrap();
+            await loadTickets();
         } catch (err: any) {
             alert(err.message || 'Unable to update the ticket.');
         }
     }
 
+    async function handleAssistTicket() {
+        if (!ticketForm.subject.trim() && !ticketForm.content.trim()) {
+            alert('Add a subject or message before asking AI to triage the request.');
+            return;
+        }
+
+        setTicketAssistLoading(true);
+        try {
+            const response = await apiPost<TicketAssistResult>('/aosai/v1/ai/ticket-assist', {
+                subject: ticketForm.subject,
+                content: ticketForm.content,
+            });
+
+            setTicketAssist(response);
+            setTicketForm((prev) => ({
+                ...prev,
+                department_id: response.department_id ? String(response.department_id) : prev.department_id,
+                priority: response.priority || prev.priority,
+                tags: Array.isArray(response.tags) && response.tags.length > 0 ? response.tags.join(', ') : prev.tags,
+                ai_summary: response.summary || prev.ai_summary,
+            }));
+        } catch (err: any) {
+            alert(err.message || 'Unable to generate ticket assistance right now.');
+        } finally {
+            setTicketAssistLoading(false);
+        }
+    }
+
     function toggleTicketNotes(ticketId: number) {
         setExpandedTickets((prev) => prev.includes(ticketId) ? prev.filter((id) => id !== ticketId) : [...prev, ticketId]);
+    }
+
+    function toggleProjectDetails(projectId: number) {
+        setExpandedProjects((prev) => prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId]);
     }
 
     async function handleAddTicketNote(ticketId: number) {
@@ -199,20 +311,11 @@ function App() {
 
         setTicketNoteSavingId(ticketId);
         try {
-            const notes = await apiPost<TicketNote[]>(`/aosai/v1/tickets/${ticketId}/notes`, { content });
-            setData((prev) => {
-                if (!prev) return prev;
-                return {
-                    ...prev,
-                    tickets: prev.tickets.map((ticket) => ticket.id === ticketId ? {
-                        ...ticket,
-                        notes: Array.isArray(notes) ? notes : (ticket.notes || []),
-                        notes_count: Array.isArray(notes) ? notes.length : (ticket.notes_count || 0),
-                    } : ticket),
-                };
-            });
+            await apiPost<TicketNote[]>(`/aosai/v1/tickets/${ticketId}/notes`, { content });
             setTicketNoteDrafts((prev) => ({ ...prev, [ticketId]: '' }));
             setExpandedTickets((prev) => prev.includes(ticketId) ? prev : [...prev, ticketId]);
+            await loadBootstrap();
+            await loadTickets();
         } catch (err: any) {
             alert(err.message || 'Unable to add the note.');
         } finally {
@@ -353,12 +456,12 @@ function App() {
                                                             <h4 className="font-semibold text-slate-900">{project.name}</h4>
                                                             <p className="mt-1 text-sm text-slate-500 line-clamp-2">{project.description || 'No project summary added yet.'}</p>
                                                         </div>
-                                                        <span className={`rounded-full border px-3 py-1 text-xs ${tone(project.status || 'active')}`}>{project.status || 'active'}</span>
+                                                        <span className={`rounded-full border px-3 py-1 text-xs ${tone(project.status || 'active')}`}>{statusLabel(project.status)}</span>
                                                     </div>
                                                     <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full" style={{ width: `${project.progress || 0}%`, background: `linear-gradient(90deg, ${data.branding.primary_color}, ${data.branding.secondary_color})` }} /></div>
                                                     <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
                                                         <span>{project.progress || 0}% complete</span>
-                                                        <span>{project.member_count || 0} members</span>
+                                                        <span>{project.open_task_count || 0} open tasks</span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -374,9 +477,9 @@ function App() {
                                                 <div key={ticket.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-4">
                                                     <div className="flex items-center justify-between gap-3">
                                                         <p className="font-medium text-slate-900">{ticket.subject}</p>
-                                                        <span className={`rounded-full border px-3 py-1 text-xs ${tone(ticket.status)}`}>{ticket.status.replace('_', ' ')}</span>
+                                                        <span className={`rounded-full border px-3 py-1 text-xs ${tone(ticket.status)}`}>{statusLabel(ticket.status)}</span>
                                                     </div>
-                                                    <p className="mt-2 text-sm text-slate-500">{ticket.department_name || 'Support'} • {ticket.priority}</p>
+                                                    <p className="mt-2 text-sm text-slate-500">{ticket.department_name || 'Support'} - {ticket.priority}</p>
                                                 </div>
                                             ))}
                                         </div>
@@ -394,14 +497,98 @@ function App() {
                                                 <h3 className="mt-2 text-2xl font-semibold text-slate-900">{project.name}</h3>
                                                 <p className="mt-3 text-sm leading-7 text-slate-500">{project.description || 'No project summary available yet.'}</p>
                                             </div>
-                                            <span className={`rounded-full border px-3 py-1 text-xs ${tone(project.status || 'active')}`}>{project.status || 'active'}</span>
+                                            <span className={`rounded-full border px-3 py-1 text-xs ${tone(project.status || 'active')}`}>{statusLabel(project.status)}</span>
                                         </div>
                                         <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full" style={{ width: `${project.progress || 0}%`, background: `linear-gradient(90deg, ${data.branding.primary_color}, ${data.branding.secondary_color})` }} /></div>
+                                        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Visible Tasks</p>
+                                                <p className="mt-2 text-xl font-semibold text-slate-900">{project.visible_task_count || 0}</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Open Tasks</p>
+                                                <p className="mt-2 text-xl font-semibold text-slate-900">{project.open_task_count || 0}</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Milestones</p>
+                                                <p className="mt-2 text-xl font-semibold text-slate-900">{project.milestone_count || 0}</p>
+                                            </div>
+                                        </div>
                                         <div className="mt-4 flex flex-wrap gap-2">{(project.tags || []).map((tag) => <span key={tag.id} className="rounded-full px-3 py-1 text-xs text-white" style={{ backgroundColor: tag.color }}>{tag.name}</span>)}</div>
                                         <div className="mt-5 flex items-center justify-between text-sm text-slate-500">
                                             <span>Owner: {project.owner_name || 'Team'}</span>
-                                            <span>Due: {project.due_date || 'Open timeline'}</span>
+                                            <span>Due: {formatDateLabel(project.due_date)}</span>
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleProjectDetails(project.id)}
+                                            className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                        >
+                                            {expandedProjects.includes(project.id) ? 'Hide project details' : 'View project details'}
+                                        </button>
+                                        {expandedProjects.includes(project.id) ? (
+                                            <div className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_.95fr]">
+                                                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-slate-900">Task visibility</p>
+                                                            <p className="mt-1 text-xs text-slate-500">{project.visible_completed_task_count || 0} completed of {project.visible_task_count || 0} visible tasks</p>
+                                                        </div>
+                                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                                                            {project.open_task_count || 0} open
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-4 space-y-3">
+                                                        {(project.task_preview || []).length > 0 ? (project.task_preview || []).map((task) => (
+                                                            <div key={task.id} className="rounded-2xl border border-white bg-white px-4 py-3">
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-medium text-slate-900">{task.title}</p>
+                                                                        <p className="mt-1 text-xs text-slate-500">{task.task_list_name || 'Task list'} - Due {formatDateLabel(task.due_date, 'No due date')}</p>
+                                                                    </div>
+                                                                    <span className={`rounded-full border px-2.5 py-1 text-[11px] ${tone(task.status)}`}>{statusLabel(task.status)}</span>
+                                                                </div>
+                                                            </div>
+                                                        )) : (
+                                                            <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">No visible project tasks to show yet.</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                                        <p className="text-sm font-semibold text-slate-900">Next milestone</p>
+                                                        {project.next_milestone ? (
+                                                            <div className="mt-4 rounded-2xl border border-white bg-white px-4 py-4">
+                                                                <div className="flex items-center justify-between gap-3">
+                                                                    <p className="font-medium text-slate-900">{project.next_milestone.name}</p>
+                                                                    <span className={`rounded-full border px-2.5 py-1 text-[11px] ${tone(project.next_milestone.status || 'upcoming')}`}>{statusLabel(project.next_milestone.status, 'upcoming')}</span>
+                                                                </div>
+                                                                <p className="mt-2 text-sm text-slate-500">Due {formatDateLabel(project.next_milestone.due_date)}</p>
+                                                                <p className="mt-2 text-sm text-slate-600">{project.next_milestone.progress || 0}% complete across linked work.</p>
+                                                            </div>
+                                                        ) : (
+                                                            <p className="mt-3 text-sm text-slate-500">No upcoming milestone is scheduled yet.</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                                                        <p className="text-sm font-semibold text-slate-900">Milestone roadmap</p>
+                                                        <div className="mt-4 space-y-3">
+                                                            {(project.milestone_preview || []).length > 0 ? (project.milestone_preview || []).map((milestone) => (
+                                                                <div key={milestone.id} className="rounded-2xl border border-white bg-white px-4 py-3">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <p className="font-medium text-slate-900">{milestone.name}</p>
+                                                                        <span className={`rounded-full border px-2.5 py-1 text-[11px] ${tone(milestone.status || 'upcoming')}`}>{statusLabel(milestone.status, 'upcoming')}</span>
+                                                                    </div>
+                                                                    <p className="mt-2 text-xs text-slate-500">Due {formatDateLabel(milestone.due_date)} - {milestone.progress || 0}% complete</p>
+                                                                </div>
+                                                            )) : (
+                                                                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">No milestones have been defined for this project yet.</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : null}
                                     </article>
                                 ))}
                             </div>
@@ -414,13 +601,13 @@ function App() {
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
                                                 <h3 className="text-lg font-semibold text-slate-900">{task.title}</h3>
-                                                <p className="mt-1 text-sm text-slate-500">{task.project_name || 'Workspace'} • {task.task_list_name || 'Task list'}</p>
+                                                <p className="mt-1 text-sm text-slate-500">{task.project_name || 'Workspace'} - {task.task_list_name || 'Task list'}</p>
                                             </div>
-                                            <span className={`rounded-full border px-3 py-1 text-xs ${tone(task.status)}`}>{task.status.replace('_', ' ')}</span>
+                                            <span className={`rounded-full border px-3 py-1 text-xs ${tone(task.status)}`}>{statusLabel(task.status)}</span>
                                         </div>
                                         <div className="mt-4 flex items-center justify-between text-sm">
                                             <span className={priorityTone(task.priority)}>{task.priority} priority</span>
-                                            <span className="text-slate-500">Due: {task.due_date || 'No due date'}</span>
+                                            <span className="text-slate-500">Due: {formatDateLabel(task.due_date, 'No due date')}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -430,18 +617,63 @@ function App() {
                         {activeView === 'tickets' && (
                             <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
                                 <div className="space-y-4">
-                                    {data.tickets.map((ticket) => (
+                                    <div className="rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Mailbox View</p>
+                                                <h3 className="mt-2 text-xl font-semibold text-slate-900">Ticket inbox</h3>
+                                                <p className="mt-1 text-sm text-slate-500">Filter support requests by status, department, and topic to work faster.</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={loadTickets}
+                                                disabled={ticketListLoading}
+                                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                            >
+                                                {ticketListLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh inbox
+                                            </button>
+                                        </div>
+                                        <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_.8fr_.8fr]">
+                                            <input
+                                                value={ticketSearch}
+                                                onChange={(e) => setTicketSearch(e.target.value)}
+                                                placeholder="Search subject, project, or request text"
+                                                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                                            />
+                                            <select value={ticketStatusFilter} onChange={(e) => setTicketStatusFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-600">
+                                                <option value="">All statuses</option>
+                                                <option value="open">Open</option>
+                                                <option value="in_progress">In Progress</option>
+                                                <option value="waiting">Waiting</option>
+                                                <option value="resolved">Resolved</option>
+                                                <option value="closed">Closed</option>
+                                            </select>
+                                            <select value={ticketDepartmentFilter} onChange={(e) => setTicketDepartmentFilter(e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-600">
+                                                <option value="">All departments</option>
+                                                {data.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <p className="mt-3 text-xs text-slate-500">{displayedTickets.length} tickets in this view</p>
+                                    </div>
+                                    {ticketListLoading && displayedTickets.length === 0 ? (
+                                        <div className="rounded-[28px] border border-white/70 bg-white/90 px-6 py-10 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                            <div className="flex items-center justify-center gap-3 text-sm text-slate-500">
+                                                <Loader2 className="h-4 w-4 animate-spin" /> Loading ticket inbox
+                                            </div>
+                                        </div>
+                                    ) : displayedTickets.length > 0 ? displayedTickets.map((ticket) => (
                                         <div key={ticket.id} className="rounded-[28px] border border-white/70 bg-white/90 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
                                             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                                 <div>
                                                     <h3 className="text-xl font-semibold text-slate-900">{ticket.subject}</h3>
                                                     <p className="mt-2 text-sm leading-7 text-slate-500">{ticket.content}</p>
                                                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                                                        <span>{ticket.department_name || 'Support'}</span><span>•</span><span>{ticket.project_name || 'General request'}</span><span>•</span><span>{ticket.notes_count || 0} notes</span>
+                                                        <span>{ticket.department_name || 'Support'}</span><span>-</span><span>{ticket.project_name || 'General request'}</span><span>-</span><span>{ticket.notes_count || 0} notes</span>
+                                                        {ticket.assignee_name ? <><span>-</span><span>Assigned to {ticket.assignee_name}</span></> : null}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col gap-2 md:items-end">
-                                                    <span className={`rounded-full border px-3 py-1 text-xs ${tone(ticket.status)}`}>{ticket.status.replace('_', ' ')}</span>
+                                                    <span className={`rounded-full border px-3 py-1 text-xs ${tone(ticket.status)}`}>{statusLabel(ticket.status)}</span>
                                                     {canManageTickets ? (
                                                         <select value={ticket.status} onChange={(e) => handleTicketStatus(ticket.id, e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
                                                             <option value="open">Open</option>
@@ -510,14 +742,50 @@ function App() {
                                                 ) : null}
                                             </div>
                                         </div>
-                                    ))}
+                                    )) : (
+                                        <div className="rounded-[28px] border border-white/70 bg-white/90 px-6 py-10 text-center shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                                            <p className="text-sm font-medium text-slate-900">No tickets match this inbox filter.</p>
+                                            <p className="mt-2 text-sm text-slate-500">Try clearing the search or switching department and status filters.</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <form onSubmit={handleCreateTicket} className="rounded-[28px] border border-white/70 bg-white/95 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
                                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Create Ticket</p>
-                                    <h3 className="mt-2 text-2xl font-semibold text-slate-900">Open a new request</h3>
+                                    <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                        <h3 className="text-2xl font-semibold text-slate-900">Open a new request</h3>
+                                        <button
+                                            type="button"
+                                            onClick={handleAssistTicket}
+                                            disabled={ticketAssistLoading || (!ticketForm.subject.trim() && !ticketForm.content.trim())}
+                                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                        >
+                                            {ticketAssistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI Assist
+                                        </button>
+                                    </div>
+                                    <p className="mt-2 text-sm text-slate-500">Use AI triage to recommend routing, priority, and a clean summary before you submit.</p>
                                     <div className="mt-5 space-y-4">
                                         <input value={ticketForm.subject} onChange={(e) => setTicketForm((prev) => ({ ...prev, subject: e.target.value }))} placeholder="Subject" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
                                         <textarea value={ticketForm.content} onChange={(e) => setTicketForm((prev) => ({ ...prev, content: e.target.value }))} placeholder="Tell us what you need" rows={6} className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                                        {ticketAssist ? (
+                                            <div className="rounded-[24px] border border-indigo-100 bg-indigo-50/70 p-4">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-sm font-semibold text-indigo-900">AI ticket assist</p>
+                                                    <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${ticketAssist.source === 'ai' ? 'bg-indigo-600 text-white' : 'border border-indigo-200 bg-white text-indigo-700'}`}>
+                                                        {ticketAssist.source === 'ai' ? 'AI Powered' : 'Fallback Logic'}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-3 text-sm leading-6 text-indigo-900">{ticketAssist.summary}</p>
+                                                <div className="mt-3 flex flex-wrap gap-2 text-xs text-indigo-700">
+                                                    <span className="rounded-full border border-indigo-200 bg-white px-3 py-1">{ticketAssist.department_name || 'General Support'}</span>
+                                                    <span className="rounded-full border border-indigo-200 bg-white px-3 py-1">{ticketAssist.priority} priority</span>
+                                                </div>
+                                                <div className="mt-4 rounded-2xl border border-indigo-100 bg-white px-4 py-3">
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-500">Suggested first reply</p>
+                                                    <p className="mt-2 text-sm leading-6 text-slate-700">{ticketAssist.first_response}</p>
+                                                </div>
+                                                {ticketAssist.message ? <p className="mt-3 text-xs text-indigo-700">{ticketAssist.message}</p> : null}
+                                            </div>
+                                        ) : null}
                                         <div className="grid gap-4 md:grid-cols-2">
                                             <select value={ticketForm.department_id} onChange={(e) => setTicketForm((prev) => ({ ...prev, department_id: e.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3 text-slate-600">
                                                 <option value="">Auto-assign department</option>
@@ -534,6 +802,13 @@ function App() {
                                             </select>
                                             <input value={ticketForm.tags} onChange={(e) => setTicketForm((prev) => ({ ...prev, tags: e.target.value }))} placeholder="Tags, comma separated" className="rounded-2xl border border-slate-200 px-4 py-3" />
                                         </div>
+                                        <textarea
+                                            value={ticketForm.ai_summary}
+                                            onChange={(e) => setTicketForm((prev) => ({ ...prev, ai_summary: e.target.value }))}
+                                            rows={3}
+                                            placeholder="AI summary will appear here after ticket assist"
+                                            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                                        />
                                         <button disabled={ticketSaving} className="inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white" style={{ background: `linear-gradient(135deg, ${data.branding.primary_color}, ${data.branding.secondary_color})` }}>
                                             {ticketSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Submit Ticket
                                         </button>
@@ -560,7 +835,7 @@ function App() {
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
                                                 <h3 className="text-lg font-semibold text-slate-900">{message.title || 'Project update'}</h3>
-                                                <p className="mt-1 text-sm text-slate-500">{message.project_name || 'General'} • {message.author_name || 'Team'}</p>
+                                                <p className="mt-1 text-sm text-slate-500">{message.project_name || 'General'} - {message.author_name || 'Team'}</p>
                                             </div>
                                         </div>
                                         <p className="mt-3 text-sm leading-7 text-slate-600">{message.content}</p>

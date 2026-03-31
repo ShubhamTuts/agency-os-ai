@@ -99,7 +99,9 @@ class AOSAI_Portal_Service {
         $file_model    = AOSAI_File::get_instance();
         $settings      = AOSAI_Setting::get_instance();
 
-        $projects = $project_model->get_user_projects( $user_id, array( 'per_page' => 8, 'page' => 1 ) );
+        $portal_type = aosai_get_user_portal_type( $user_id );
+        $projects = $project_model->get_user_projects( $user_id, array( 'per_page' => 24, 'page' => 1 ) );
+        $projects = $this->decorate_portal_projects( $projects, $portal_type );
         $tasks    = $task_model->get_my_tasks( $user_id, array( 'per_page' => 8, 'page' => 1, 'include_all_if_manager' => true ) );
         $tickets  = $ticket_model->get_tickets_for_user( $user_id, array( 'per_page' => 8, 'page' => 1 ) );
         $messages = $message_model->get_messages_for_user( $user_id, array( 'per_page' => 6, 'page' => 1 ) );
@@ -108,7 +110,7 @@ class AOSAI_Portal_Service {
         $user = $user_model->get_formatted_user( $user_id ) ?: array();
         $wp_user = get_userdata( $user_id );
         $user['roles']       = $wp_user ? array_values( (array) $wp_user->roles ) : array();
-        $user['portal_type'] = aosai_get_user_portal_type( $user_id );
+        $user['portal_type'] = $portal_type;
 
         return array(
             'user'        => $user,
@@ -137,6 +139,111 @@ class AOSAI_Portal_Service {
         );
     }
 
+    private function decorate_portal_projects( array $projects, string $portal_type ): array {
+        $task_model      = AOSAI_Task::get_instance();
+        $milestone_model = AOSAI_Milestone::get_instance();
+
+        foreach ( $projects as &$project ) {
+            $project_id  = (int) ( $project['id'] ?? 0 );
+            $task_preview = $task_model->get_project_tasks(
+                $project_id,
+                array(
+                    'per_page' => 6,
+                    'page'     => 1,
+                    'orderby'  => 'due_date',
+                    'order'    => 'ASC',
+                )
+            );
+
+            if ( 'client' === $portal_type ) {
+                $task_preview = array_values(
+                    array_filter(
+                        $task_preview,
+                        static fn( array $task ): bool => empty( $task['is_private'] )
+                    )
+                );
+            }
+
+            $milestones = $milestone_model->get_project_milestones( $project_id );
+            $visible_task_stats = $this->get_visible_task_stats_for_project( $project_id, $portal_type );
+
+            $project['task_preview']                = array_slice( $task_preview, 0, 4 );
+            $project['milestone_preview']           = array_slice( $milestones, 0, 4 );
+            $project['next_milestone']              = $this->get_next_milestone( $milestones );
+            $project['visible_task_count']          = $visible_task_stats['total'];
+            $project['visible_completed_task_count'] = $visible_task_stats['completed'];
+            $project['open_task_count']             = $visible_task_stats['open'];
+            $project['milestone_count']             = count( $milestones );
+
+            if ( 'client' === $portal_type && $visible_task_stats['total'] > 0 ) {
+                $project['progress'] = $visible_task_stats['percentage'];
+            }
+        }
+
+        return $projects;
+    }
+
+    private function get_visible_task_stats_for_project( int $project_id, string $portal_type ): array {
+        global $wpdb;
+
+        $where = 'WHERE project_id = %d';
+        $args  = array( $project_id );
+
+        if ( 'client' === $portal_type ) {
+            $where .= ' AND is_private = 0';
+        }
+
+        $stats = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status IN ('done', 'completed') THEN 1 ELSE 0 END) as completed
+                FROM {$wpdb->prefix}aosai_tasks
+                {$where}",
+                ...$args
+            ),
+            ARRAY_A
+        );
+
+        $total      = absint( $stats['total'] ?? 0 );
+        $completed  = absint( $stats['completed'] ?? 0 );
+        $percentage = $total > 0 ? round( ( $completed / $total ) * 100, 1 ) : 0;
+
+        return array(
+            'total'      => $total,
+            'completed'  => $completed,
+            'open'       => max( 0, $total - $completed ),
+            'percentage' => $percentage,
+        );
+    }
+
+    private function get_next_milestone( array $milestones ): ?array {
+        $upcoming = array_values(
+            array_filter(
+                $milestones,
+                static function( array $milestone ): bool {
+                    return 'completed' !== (string) ( $milestone['status'] ?? '' );
+                }
+            )
+        );
+
+        if ( empty( $upcoming ) ) {
+            return null;
+        }
+
+        usort(
+            $upcoming,
+            static function( array $left, array $right ): int {
+                $left_due  = ! empty( $left['due_date'] ) ? strtotime( (string) $left['due_date'] ) : PHP_INT_MAX;
+                $right_due = ! empty( $right['due_date'] ) ? strtotime( (string) $right['due_date'] ) : PHP_INT_MAX;
+
+                return $left_due <=> $right_due;
+            }
+        );
+
+        return $upcoming[0] ?? null;
+    }
+
     private function count_projects_for_user( int $user_id ): int {
         global $wpdb;
 
@@ -157,6 +264,21 @@ class AOSAI_Portal_Service {
 
     private function count_tasks_for_user( int $user_id ): int {
         global $wpdb;
+
+        if ( 'client' === aosai_get_user_portal_type( $user_id ) ) {
+            return (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(DISTINCT t.id)
+                    FROM {$wpdb->prefix}aosai_tasks t
+                    INNER JOIN {$wpdb->prefix}aosai_project_users pu ON t.project_id = pu.project_id
+                    LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                    WHERE pu.user_id = %d
+                    AND p.id IS NOT NULL
+                    AND t.is_private = 0",
+                    $user_id
+                )
+            );
+        }
 
         $has_workspace_scope = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) || user_can( $user_id, 'aosai_manage_tickets' );
 
@@ -185,6 +307,25 @@ class AOSAI_Portal_Service {
 
     private function count_overdue_tasks_for_user( int $user_id ): int {
         global $wpdb;
+
+        if ( 'client' === aosai_get_user_portal_type( $user_id ) ) {
+            return (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(DISTINCT t.id)
+                    FROM {$wpdb->prefix}aosai_tasks t
+                    INNER JOIN {$wpdb->prefix}aosai_project_users pu ON t.project_id = pu.project_id
+                    LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                    WHERE pu.user_id = %d
+                    AND p.id IS NOT NULL
+                    AND t.is_private = 0
+                    AND t.status NOT IN ('done', 'completed')
+                    AND t.due_date IS NOT NULL
+                    AND t.due_date < %s",
+                    $user_id,
+                    current_time( 'Y-m-d' )
+                )
+            );
+        }
 
         $has_workspace_scope = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) || user_can( $user_id, 'aosai_manage_tickets' );
 

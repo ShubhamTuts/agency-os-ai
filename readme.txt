@@ -4,7 +4,7 @@ Tags: project management, task management, client portal, help desk, ai assistan
 Requires at least: 6.4
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -201,6 +201,13 @@ No other external services are contacted by the free core. Outbound webhooks fir
 
 == Changelog ==
 
+= 1.4.0 =
+- Added AI ticket assist in the frontend portal for summary, priority, department, suggested first reply, and tags
+- Added AI team coach guidance in access management using live workspace data
+- Added searchable mailbox-style portal ticket inbox with status and department filters
+- Added richer client project visibility with task previews, milestone previews, and next milestone context
+- Expanded client portal task visibility counts so client dashboards reflect project work more accurately
+
 = 1.3.0 =
 - Added built-in SMTP configuration for reliable email delivery from the Settings screen
 - Added inbound email-to-ticket webhook endpoint for auto-ticket creation from forwarded emails
@@ -226,6 +233,9 @@ No other external services are contacted by the free core. Outbound webhooks fir
 - Added documentation HTML bundle
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+This release adds AI ticket triage, AI team coaching, a searchable portal ticket inbox, and richer client project visibility in the frontend workspace.
 
 = 1.3.0 =
 This release adds built-in SMTP, inbound email-to-ticket webhooks, outbound event webhooks with HMAC verification, and department auto-assignment. Upgrade to get reliable email delivery and external integrations without additional plugins.

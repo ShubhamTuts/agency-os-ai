@@ -39,14 +39,17 @@ Agency OS AI brings those core workflows into WordPress with a modern React admi
 - Admin bar hiding and frontend-first redirects for portal users
 - One-click page creation for login, portal, and support pages
 - PWA basics for an installable frontend portal experience
+- Searchable ticket inbox with status and department filters
+- Rich project visibility cards with task previews, milestone previews, and next-milestone insight
 
 **Help desk and support tickets**
 
 - Support tickets, departments, ticket notes, and reusable dynamic tags
 - Department default assignee for automatic ticket routing on new submissions
 - AI-assisted department routing baseline when an OpenAI key is present
+- AI ticket assist for summary, routing, priority, suggested first reply, and tags
 
-**Email and connectivity (new in 1.3.0)**
+**Email, automation, and support operations**
 
 - Built-in SMTP configuration: host, port, authentication, encryption, all from the Settings screen
 - Branded email notifications with customizable sender name, sender address, and footer text
@@ -58,6 +61,9 @@ Agency OS AI brings those core workflows into WordPress with a modern React admi
 - OpenAI integration using your own API key
 - AI playground for direct workspace queries
 - AI-assisted ticket department routing
+- AI ticket triage assist in the portal
+- AI productivity brief in reports
+- AI team coach brief in access management
 
 **Company branding**
 
@@ -113,19 +119,19 @@ npm run build
 
 ```text
 agency-os-ai/
-├─ agency-os-ai.php
-├─ includes/
-│  ├─ api/
-│  ├─ admin/
-│  ├─ frontend/
-│  ├─ helpers/
-│  ├─ models/
-│  └─ services/
-├─ src/
-│  ├─ admin/
-│  └─ portal/
-├─ templates/
-└─ build/
+|- agency-os-ai.php
+|- includes/
+|  |- api/
+|  |- admin/
+|  |- frontend/
+|  |- helpers/
+|  |- models/
+|  `- services/
+|- src/
+|  |- admin/
+|  `- portal/
+|- templates/
+`- build/
 ```
 
 ## Extension philosophy
@@ -188,6 +194,13 @@ When contributing, please keep the docs, README, and actual product behavior ali
 GPL-2.0-or-later
 
 ## Changelog
+
+### 1.4.0 - 2026-03-31
+- Added AI ticket assist in the frontend portal for summary, priority, department, suggested first reply, and tags
+- Added AI team coach brief in access management for live team guidance
+- Added searchable mailbox-style portal ticket inbox with status and department filters
+- Added richer client project visibility with task previews, milestone previews, and next milestone context
+- Expanded client portal task visibility counts so client dashboards reflect public project work more accurately
 
 ### 1.3.0 - 2026-03-31
 - Added built-in SMTP configuration for reliable email delivery from the Settings screen (host, port, auth, encryption)
