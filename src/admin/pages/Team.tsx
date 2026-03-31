@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { apiGet, apiPost } from '../services/api';

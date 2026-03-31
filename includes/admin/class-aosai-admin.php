@@ -24,7 +24,10 @@ class AOSAI_Admin {
 
         $entry = aosai_get_asset_entry( 'src/admin/index.tsx' );
         $version = AOSAI_VERSION;
-        $deps = array_merge( array( 'wp-element', 'wp-api-fetch', 'wp-i18n' ), $this->get_react_deps() );
+        // No WP React deps — our Vite bundle is self-contained with React 18 bundled
+        // inline. Loading wp-element / react / react-dom alongside the bundle creates
+        // two React instances on the same page, causing reconciler DOM conflicts.
+        $deps = array();
 
         if ( $entry ) {
             wp_enqueue_script(
@@ -87,20 +90,6 @@ class AOSAI_Admin {
         wp_localize_script( 'aosai-admin-app', 'aosaiData', $data );
 
         do_action( 'aosai_enqueue_pro_assets', $hook );
-    }
-
-    private function get_react_deps() {
-        global $wp_scripts;
-        if ( ! isset( $wp_scripts ) ) {
-            return array();
-        }
-        $deps = array();
-        foreach ( array( 'react', 'react-dom' ) as $handle ) {
-            if ( $wp_scripts->query( $handle, 'registered' ) ) {
-                $deps[] = $handle;
-            }
-        }
-        return $deps;
     }
 
     public function add_module_type( $tag, $handle, $src ) {

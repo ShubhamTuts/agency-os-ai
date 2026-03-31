@@ -1,4 +1,4 @@
-﻿const runtimeData = (window as any).aosaiData || (window as any).aosaiPortalData || {};
+const runtimeData = (window as any).aosaiData || (window as any).aosaiPortalData || {};
 const API_BASE = (runtimeData.apiBase || '/wp-json').replace(/\/$/, '');
 
 function normalizeApiPayload<T>(payload: any): T {
