@@ -100,17 +100,10 @@ class AOSAI_Portal_Service {
         $settings      = AOSAI_Setting::get_instance();
 
         $projects = $project_model->get_user_projects( $user_id, array( 'per_page' => 8, 'page' => 1 ) );
-        $tasks    = $task_model->get_my_tasks( $user_id, array( 'per_page' => 8, 'page' => 1 ) );
+        $tasks    = $task_model->get_my_tasks( $user_id, array( 'per_page' => 8, 'page' => 1, 'include_all_if_manager' => true ) );
         $tickets  = $ticket_model->get_tickets_for_user( $user_id, array( 'per_page' => 8, 'page' => 1 ) );
         $messages = $message_model->get_messages_for_user( $user_id, array( 'per_page' => 6, 'page' => 1 ) );
         $files    = $file_model->get_user_files( $user_id, array( 'per_page' => 6, 'page' => 1 ) );
-
-        $overdue_tasks = 0;
-        foreach ( $tasks as $task ) {
-            if ( ! empty( $task['due_date'] ) && ! in_array( $task['status'] ?? '', array( 'done', 'completed' ), true ) && strtotime( $task['due_date'] ) < strtotime( current_time( 'Y-m-d' ) ) ) {
-                $overdue_tasks++;
-            }
-        }
 
         $user = $user_model->get_formatted_user( $user_id ) ?: array();
         $wp_user = get_userdata( $user_id );
@@ -122,11 +115,11 @@ class AOSAI_Portal_Service {
             'branding'    => $settings->get_portal_branding(),
             'navigation'  => $this->get_navigation_for_user( $user_id ),
             'stats'       => array(
-                'projects'      => count( $projects ),
-                'tasks'         => count( $tasks ),
-                'tickets'       => count( $tickets ),
-                'messages'      => count( $messages ),
-                'overdue_tasks' => $overdue_tasks,
+                'projects'      => $this->count_projects_for_user( $user_id ),
+                'tasks'         => $this->count_tasks_for_user( $user_id ),
+                'tickets'       => $this->count_tickets_for_user( $user_id ),
+                'messages'      => $this->count_messages_for_user( $user_id ),
+                'overdue_tasks' => $this->count_overdue_tasks_for_user( $user_id ),
             ),
             'projects'    => $projects,
             'tasks'       => $tasks,
@@ -141,6 +134,129 @@ class AOSAI_Portal_Service {
                 'tickets'=> aosai_get_ticket_page_url(),
                 'logout' => wp_logout_url( aosai_get_login_page_url() ),
             ),
+        );
+    }
+
+    private function count_projects_for_user( int $user_id ): int {
+        global $wpdb;
+
+        if ( user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) ) {
+            return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}aosai_projects" );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(DISTINCT p.id)
+                FROM {$wpdb->prefix}aosai_projects p
+                INNER JOIN {$wpdb->prefix}aosai_project_users pu ON p.id = pu.project_id
+                WHERE pu.user_id = %d",
+                $user_id
+            )
+        );
+    }
+
+    private function count_tasks_for_user( int $user_id ): int {
+        global $wpdb;
+
+        $has_workspace_scope = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) || user_can( $user_id, 'aosai_manage_tickets' );
+
+        if ( $has_workspace_scope ) {
+            return (int) $wpdb->get_var(
+                "SELECT COUNT(*)
+                FROM {$wpdb->prefix}aosai_tasks t
+                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                WHERE p.id IS NOT NULL"
+            );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(DISTINCT t.id)
+                FROM {$wpdb->prefix}aosai_tasks t
+                INNER JOIN {$wpdb->prefix}aosai_task_users tu ON t.id = tu.task_id
+                INNER JOIN {$wpdb->prefix}aosai_project_users pu ON t.project_id = pu.project_id AND pu.user_id = %d
+                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                WHERE tu.user_id = %d AND p.id IS NOT NULL",
+                $user_id,
+                $user_id
+            )
+        );
+    }
+
+    private function count_overdue_tasks_for_user( int $user_id ): int {
+        global $wpdb;
+
+        $has_workspace_scope = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) || user_can( $user_id, 'aosai_manage_tickets' );
+
+        if ( $has_workspace_scope ) {
+            return (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*)
+                    FROM {$wpdb->prefix}aosai_tasks t
+                    LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                    WHERE p.id IS NOT NULL
+                    AND t.status NOT IN ('done', 'completed')
+                    AND t.due_date IS NOT NULL
+                    AND t.due_date < %s",
+                    current_time( 'Y-m-d' )
+                )
+            );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(DISTINCT t.id)
+                FROM {$wpdb->prefix}aosai_tasks t
+                INNER JOIN {$wpdb->prefix}aosai_task_users tu ON t.id = tu.task_id
+                INNER JOIN {$wpdb->prefix}aosai_project_users pu ON t.project_id = pu.project_id AND pu.user_id = %d
+                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                WHERE tu.user_id = %d
+                AND p.id IS NOT NULL
+                AND t.status NOT IN ('done', 'completed')
+                AND t.due_date IS NOT NULL
+                AND t.due_date < %s",
+                $user_id,
+                $user_id,
+                current_time( 'Y-m-d' )
+            )
+        );
+    }
+
+    private function count_tickets_for_user( int $user_id ): int {
+        global $wpdb;
+
+        if ( user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_tickets' ) ) {
+            return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}aosai_tickets" );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*)
+                FROM {$wpdb->prefix}aosai_tickets
+                WHERE requester_id = %d OR assignee_id = %d",
+                $user_id,
+                $user_id
+            )
+        );
+    }
+
+    private function count_messages_for_user( int $user_id ): int {
+        global $wpdb;
+
+        if ( user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' ) ) {
+            return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}aosai_messages" );
+        }
+
+        return (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(DISTINCT m.id)
+                FROM {$wpdb->prefix}aosai_messages m
+                LEFT JOIN {$wpdb->prefix}aosai_project_users pu ON m.project_id = pu.project_id
+                WHERE ( m.project_id = 0 OR pu.user_id = %d )
+                AND ( m.is_private = 0 OR m.created_by = %d )",
+                $user_id,
+                $user_id
+            )
         );
     }
 

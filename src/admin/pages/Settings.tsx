@@ -1,13 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { apiGet, apiPost } from '../services/api';
-import { Bot, Building2, CheckCircle, Key, Link2, Mail, PanelsTopLeft, Server, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
+import { apiDelete, apiGet, apiPost, apiPut } from '../services/api';
+import { Bot, Building2, CheckCircle, Globe, Key, Link2, Mail, PanelsTopLeft, Save, Server, ShieldCheck, Sparkles, Trash2, Wand2, Workflow } from 'lucide-react';
 
 interface ShortcodeRef {
     label: string;
     shortcode: string;
     description: string;
+}
+
+interface WebhookItem {
+    id: number;
+    name: string;
+    url: string;
+    events: string;
+    secret: string;
+    is_active: number;
+    trigger_count?: number;
+    last_triggered_at?: string | null;
 }
 
 interface SettingsState {
@@ -75,21 +86,32 @@ const DEFAULTS: SettingsState = {
 
 export default function Settings() {
     const [settings, setSettings] = useState<SettingsState>(DEFAULTS);
+    const [webhooks, setWebhooks] = useState<WebhookItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [testing, setTesting] = useState(false);
     const [smtpTesting, setSmtpTesting] = useState(false);
+    const [webhookLoading, setWebhookLoading] = useState(false);
+    const [webhookSaving, setWebhookSaving] = useState(false);
+    const [webhookActionId, setWebhookActionId] = useState<number | null>(null);
     const [creatingPages, setCreatingPages] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const [smtpResult, setSmtpResult] = useState<{ success: boolean; message: string } | null>(null);
-    const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'email'>('company');
+    const [webhookResult, setWebhookResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [webhookForm, setWebhookForm] = useState({ name: '', url: '', events: 'all' });
+    const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'email' | 'automation'>('company');
 
     useEffect(() => {
         apiGet<SettingsState>('/aosai/v1/settings')
             .then((response) => setSettings((prev) => ({ ...prev, ...response })))
             .finally(() => setLoading(false));
     }, []);
+
+    useEffect(() => {
+        if (activeTab !== 'automation') return;
+        loadWebhooks();
+    }, [activeTab]);
 
     async function handleSave(e: React.FormEvent) {
         e.preventDefault();
@@ -150,6 +172,81 @@ export default function Settings() {
         }
     }
 
+    async function loadWebhooks() {
+        setWebhookLoading(true);
+        try {
+            const result = await apiGet<WebhookItem[]>('/aosai/v1/webhooks');
+            setWebhooks(Array.isArray(result) ? result : []);
+        } catch (err: any) {
+            setWebhookResult({ success: false, message: err.message || 'Unable to load webhooks.' });
+            setWebhooks([]);
+        } finally {
+            setWebhookLoading(false);
+        }
+    }
+
+    async function handleCreateWebhook(e: React.FormEvent) {
+        e.preventDefault();
+        if (!webhookForm.name.trim() || !webhookForm.url.trim()) return;
+        setWebhookSaving(true);
+        setWebhookResult(null);
+        try {
+            const created = await apiPost<WebhookItem>('/aosai/v1/webhooks', webhookForm);
+            setWebhooks((prev) => [created, ...prev]);
+            setWebhookForm({ name: '', url: '', events: 'all' });
+            setWebhookResult({ success: true, message: 'Webhook created successfully.' });
+        } catch (err: any) {
+            setWebhookResult({ success: false, message: err.message || 'Unable to create webhook.' });
+        } finally {
+            setWebhookSaving(false);
+        }
+    }
+
+    async function handleTestWebhook(id: number) {
+        setWebhookActionId(id);
+        setWebhookResult(null);
+        try {
+            const result = await apiPost<{ success: boolean; message: string; status_code?: number }>(`/aosai/v1/webhooks/${id}/test`);
+            setWebhookResult({
+                success: !!result?.success,
+                message: result?.status_code ? `${result.message} (${result.status_code})` : (result?.message || 'Webhook test finished.'),
+            });
+            await loadWebhooks();
+        } catch (err: any) {
+            setWebhookResult({ success: false, message: err.message || 'Unable to test webhook.' });
+        } finally {
+            setWebhookActionId(null);
+        }
+    }
+
+    async function handleToggleWebhook(item: WebhookItem) {
+        setWebhookActionId(item.id);
+        setWebhookResult(null);
+        try {
+            const updated = await apiPut<WebhookItem>(`/aosai/v1/webhooks/${item.id}`, { is_active: item.is_active ? 0 : 1 });
+            setWebhooks((prev) => prev.map((hook) => hook.id === item.id ? updated : hook));
+        } catch (err: any) {
+            setWebhookResult({ success: false, message: err.message || 'Unable to update webhook status.' });
+        } finally {
+            setWebhookActionId(null);
+        }
+    }
+
+    async function handleDeleteWebhook(id: number) {
+        if (!confirm('Delete this webhook?')) return;
+        setWebhookActionId(id);
+        setWebhookResult(null);
+        try {
+            await apiDelete(`/aosai/v1/webhooks/${id}`);
+            setWebhooks((prev) => prev.filter((hook) => hook.id !== id));
+            setWebhookResult({ success: true, message: 'Webhook deleted.' });
+        } catch (err: any) {
+            setWebhookResult({ success: false, message: err.message || 'Unable to delete webhook.' });
+        } finally {
+            setWebhookActionId(null);
+        }
+    }
+
     if (loading) return <DashboardLayout><LoadingSpinner /></DashboardLayout>;
 
     const tabs = [
@@ -157,6 +254,7 @@ export default function Settings() {
         { id: 'portal', label: 'Portal', icon: PanelsTopLeft },
         { id: 'ai', label: 'AI', icon: Bot },
         { id: 'email', label: 'Email', icon: Mail },
+        { id: 'automation', label: 'Automation', icon: Workflow },
     ] as const;
 
     return (
@@ -336,23 +434,25 @@ export default function Settings() {
                                 <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
-                                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Inbound Email Tickets</h2>
-                                            <p className="mt-1 text-sm text-gray-500">Create tickets from email pipes, relay hooks, or automation tools with a signed inbound endpoint.</p>
+                                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Delivery Playbook</h2>
+                                            <p className="mt-1 text-sm text-gray-500">Use this tab for branded sender settings and SMTP delivery. Keep inbound ticket intake and webhooks in the Automation workspace.</p>
                                         </div>
                                         <ShieldCheck className="h-5 w-5 text-gray-400" />
                                     </div>
-                                    <div className="mt-5 space-y-4">
-                                        <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm"><span>Use AI routing on inbound email</span><input type="checkbox" checked={settings.inbound_ai_routing} onChange={(e) => setSettings((prev) => ({ ...prev, inbound_ai_routing: e.target.checked }))} /></label>
-                                        <input value={settings.inbound_email_token} onChange={(e) => setSettings((prev) => ({ ...prev, inbound_email_token: e.target.value }))} placeholder="Inbound security token" className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
-                                        <div>
-                                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Inbound endpoint</p>
-                                            <input readOnly value={settings.inbound_email_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                    <div className="mt-5 space-y-3">
+                                        <div className="rounded-2xl border border-gray-200 px-4 py-4 text-sm text-gray-600">
+                                            Configure support inbox delivery, custom from details, and your SMTP transport here.
                                         </div>
-                                        <div>
-                                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Email pipe endpoint</p>
-                                            <input readOnly value={settings.inbound_email_pipe_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                        <div className="rounded-2xl border border-gray-200 px-4 py-4 text-sm text-gray-600">
+                                            Use the Automation tab for signed inbound email endpoints, security tokens, webhook secrets, and event-driven workflow triggers.
                                         </div>
-                                        <p className="text-xs leading-6 text-gray-500">Pass the token as `token` or `X-AOSAI-Inbound-Token`. Payloads can include `from_email`, `from_name`, `subject`, `body_plain`, `body_html`, and optional `priority`.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveTab('automation')}
+                                            className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                        >
+                                            <Workflow className="h-4 w-4" /> Open Automation Settings
+                                        </button>
                                     </div>
                                 </section>
 
@@ -369,9 +469,119 @@ export default function Settings() {
                         </div>
                     )}
 
+                    {activeTab === 'automation' && (
+                        <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
+                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Webhook Automations</h2>
+                                        <p className="mt-1 text-sm text-gray-500">Send ticket, task, and workflow events to external services, CRMs, or no-code automation tools.</p>
+                                    </div>
+                                    <Workflow className="h-5 w-5 text-gray-400" />
+                                </div>
+
+                                <form onSubmit={handleCreateWebhook} className="mt-6 grid gap-4">
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <input value={webhookForm.name} onChange={(e) => setWebhookForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Webhook name" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                        <select value={webhookForm.events} onChange={(e) => setWebhookForm((prev) => ({ ...prev, events: e.target.value }))} className="rounded-2xl border border-gray-300 px-4 py-3 text-sm">
+                                            <option value="all">All events</option>
+                                            <option value="ticket.created">Ticket created</option>
+                                            <option value="ticket.updated">Ticket updated</option>
+                                            <option value="ticket.note_added">Ticket note added</option>
+                                            <option value="task.created">Task created</option>
+                                            <option value="task.updated">Task updated</option>
+                                            <option value="project.created">Project created</option>
+                                            <option value="project.updated">Project updated</option>
+                                        </select>
+                                    </div>
+                                    <input value={webhookForm.url} onChange={(e) => setWebhookForm((prev) => ({ ...prev, url: e.target.value }))} placeholder="https://example.com/webhook" className="rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
+                                    <div className="flex items-center gap-3">
+                                        <button type="submit" disabled={webhookSaving || !webhookForm.name.trim() || !webhookForm.url.trim()} className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                                            <Globe className="h-4 w-4" /> {webhookSaving ? 'Creating...' : 'Add Webhook'}
+                                        </button>
+                                        {webhookResult && <div className={`rounded-2xl px-4 py-3 text-sm font-medium ${webhookResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{webhookResult.message}</div>}
+                                    </div>
+                                </form>
+
+                                <div className="mt-8 space-y-4">
+                                    {webhookLoading ? <LoadingSpinner /> : webhooks.length === 0 ? (
+                                        <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500">No webhooks configured yet. Add one above to push Agency OS AI events into your broader workflow stack.</div>
+                                    ) : webhooks.map((item) => (
+                                        <div key={item.id} className="rounded-3xl border border-gray-200 p-5">
+                                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-base font-semibold text-gray-900">{item.name}</p>
+                                                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{item.is_active ? 'Active' : 'Paused'}</span>
+                                                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">{item.events || 'all'}</span>
+                                                    </div>
+                                                    <p className="mt-2 break-all text-sm text-gray-500">{item.url}</p>
+                                                    <div className="mt-3 grid gap-2 text-xs text-gray-500 md:grid-cols-3">
+                                                        <p><strong>Secret:</strong> <span className="break-all">{item.secret}</span></p>
+                                                        <p><strong>Triggered:</strong> {item.trigger_count || 0} times</p>
+                                                        <p><strong>Last run:</strong> {item.last_triggered_at ? new Date(item.last_triggered_at).toLocaleString() : 'Never'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button type="button" onClick={() => handleToggleWebhook(item)} disabled={webhookActionId === item.id} className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-50">
+                                                        {webhookActionId === item.id ? 'Saving...' : (item.is_active ? 'Pause' : 'Activate')}
+                                                    </button>
+                                                    <button type="button" onClick={() => handleTestWebhook(item.id)} disabled={webhookActionId === item.id} className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-50">
+                                                        {webhookActionId === item.id ? 'Testing...' : 'Send Test'}
+                                                    </button>
+                                                    <button type="button" onClick={() => handleDeleteWebhook(item.id)} disabled={webhookActionId === item.id} className="inline-flex items-center gap-1 rounded-full border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 disabled:opacity-50">
+                                                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Inbound Email Setup</h2>
+                                <div className="mt-5 space-y-4">
+                                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Secure token</p>
+                                        <p className="mt-2 break-all text-sm font-medium text-gray-900">{settings.inbound_email_token}</p>
+                                    </div>
+                                    <div>
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Primary endpoint</p>
+                                        <input readOnly value={settings.inbound_email_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                    </div>
+                                    <div>
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Pipe endpoint</p>
+                                        <input readOnly value={settings.inbound_email_pipe_endpoint || ''} className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm" />
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 p-4 text-sm text-gray-600">
+                                        <p className="font-medium text-gray-900">Recommended payload</p>
+                                        <pre className="mt-3 overflow-x-auto rounded-2xl bg-gray-950 p-4 text-xs text-gray-100">{`{
+  "from_email": "client@example.com",
+  "from_name": "Client Name",
+  "subject": "Need help with launch",
+  "body_plain": "Please update the homepage CTA today.",
+  "priority": "high",
+  "token": "${settings.inbound_email_token || 'your-token'}"
+}`}</pre>
+                                        <p className="mt-3 leading-6">Use this with mail relays, form tools, server pipes, or workflow platforms. The plugin will create a ticket, route the department, and trigger ticket automation from the same request.</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 p-4 text-sm text-gray-600">
+                                        <p className="font-medium text-gray-900">Supported automation events</p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {['ticket.created', 'ticket.updated', 'ticket.note_added', 'task.created', 'task.updated', 'project.created', 'project.updated'].map((event) => (
+                                                <span key={event} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">{event}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    )}
+
                     <div className="flex justify-end">
                         <button disabled={saving} className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-5 py-3 text-sm font-semibold text-white">
-                            <Mail className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Settings'}
+                            <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Settings'}
                         </button>
                     </div>
                 </form>

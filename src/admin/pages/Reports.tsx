@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { apiGet } from '../services/api';
+import { apiGet, apiPost } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { FolderKanban, CheckSquare, TrendingUp, Clock, Users } from 'lucide-react';
+import { FolderKanban, CheckSquare, TrendingUp, Clock, Users, Sparkles } from 'lucide-react';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -24,9 +24,20 @@ interface ReportData {
     member_performance: Array<{ name: string; tasks: number; completed: number }>;
 }
 
+interface ProductivityBrief {
+    source: 'ai' | 'fallback';
+    summary: string;
+    action_items: string[];
+    risks: string[];
+    wins: string[];
+    message?: string;
+}
+
 export default function Reports() {
     const [data, setData] = useState<ReportData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [briefLoading, setBriefLoading] = useState(false);
+    const [brief, setBrief] = useState<ProductivityBrief | null>(null);
 
     useEffect(() => {
         apiGet<any>('/aosai/v1/reports/overview').then(r => {
@@ -70,6 +81,30 @@ export default function Reports() {
         ? Math.round(memberPerformance.reduce((sum, member) => sum + member.completionRate, 0) / memberPerformance.length)
         : 0;
 
+    async function handleGenerateBrief() {
+        if (!data) return;
+        setBriefLoading(true);
+        try {
+            const result = await apiPost<ProductivityBrief>('/aosai/v1/ai/productivity-brief', {
+                overview: data.overview,
+                project_stats: data.project_stats,
+                member_performance: data.member_performance,
+                task_by_status: data.task_by_status,
+            });
+            setBrief(result);
+        } catch (err: any) {
+            setBrief({
+                source: 'fallback',
+                summary: err.message || 'Unable to generate the productivity brief right now.',
+                action_items: [],
+                risks: [],
+                wins: [],
+            });
+        } finally {
+            setBriefLoading(false);
+        }
+    }
+
     return (
         <DashboardLayout>
             <div className="max-w-7xl mx-auto space-y-6">
@@ -96,6 +131,66 @@ export default function Reports() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="max-w-2xl">
+                                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-primary-500" /> AI Productivity Brief
+                                </h2>
+                                <p className="mt-2 text-sm text-gray-500">
+                                    Turn the current workspace metrics into concrete next actions for team delivery, project momentum, and operational risk control.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleGenerateBrief}
+                                disabled={briefLoading}
+                                className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                            >
+                                <Sparkles className="w-4 h-4" /> {briefLoading ? 'Generating...' : (brief ? 'Refresh Brief' : 'Generate Brief')}
+                            </button>
+                        </div>
+
+                        {brief ? (
+                            <div className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+                                <div className="rounded-3xl border border-primary-100 bg-primary-50/60 p-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500">Summary</p>
+                                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${brief.source === 'ai' ? 'bg-primary-600 text-white' : 'bg-white text-primary-700 border border-primary-200'}`}>
+                                            {brief.source === 'ai' ? 'AI Powered' : 'Metric Powered'}
+                                        </span>
+                                    </div>
+                                    <p className="mt-3 text-sm leading-7 text-gray-700">{brief.summary}</p>
+                                    {brief.message ? <p className="mt-3 text-xs text-gray-500">{brief.message}</p> : null}
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
+                                    <div className="rounded-3xl border border-gray-200 p-5">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Next Best Actions</p>
+                                        <ul className="mt-3 space-y-2 text-sm text-gray-600">
+                                            {brief.action_items.length > 0 ? brief.action_items.map((item, index) => <li key={index}>- {item}</li>) : <li>No immediate action items returned.</li>}
+                                        </ul>
+                                    </div>
+                                    <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-5">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-400">Risks</p>
+                                        <ul className="mt-3 space-y-2 text-sm text-rose-700">
+                                            {brief.risks.length > 0 ? brief.risks.map((item, index) => <li key={index}>- {item}</li>) : <li>No major risks detected.</li>}
+                                        </ul>
+                                    </div>
+                                    <div className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-500">Wins</p>
+                                        <ul className="mt-3 space-y-2 text-sm text-emerald-700">
+                                            {brief.wins.length > 0 ? brief.wins.map((item, index) => <li key={index}>- {item}</li>) : <li>No wins captured yet.</li>}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mt-6 rounded-3xl border border-dashed border-gray-200 px-5 py-10 text-sm text-gray-500">
+                                Generate a productivity brief to turn the current charts into a real action plan for delivery, team focus, and risk recovery.
+                            </div>
+                        )}
+                    </div>
+
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                         <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Tasks by Status</h2>
                         {data.task_by_status.length > 0 ? (

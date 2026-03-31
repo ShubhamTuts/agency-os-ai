@@ -262,7 +262,15 @@ class AOSAI_REST_Webhooks extends WP_REST_Controller {
     }
 
     public function admin_permissions_check() {
-        return current_user_can( 'manage_options' );
+        if ( ! is_user_logged_in() ) {
+            return new WP_Error( 'rest_not_logged_in', __( 'You must be logged in.', 'agency-os-ai' ), array( 'status' => 401 ) );
+        }
+
+        if ( ! current_user_can( 'aosai_manage_settings' ) && ! current_user_can( 'manage_options' ) ) {
+            return new WP_Error( 'rest_forbidden', __( 'You do not have permission to manage automations.', 'agency-os-ai' ), array( 'status' => 403 ) );
+        }
+
+        return true;
     }
 
     private function get_create_args(): array {

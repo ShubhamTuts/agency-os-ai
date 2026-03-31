@@ -43,8 +43,8 @@ interface Tag { id: number; name: string; color: string; }
 interface UserProfile { id: number; first_name?: string; last_name?: string; display_name?: string; name?: string; email: string; avatar_url?: string; roles?: string[]; portal_type?: string; }
 interface Project { id: number; name: string; description?: string; status?: string; progress?: number; due_date?: string; owner_name?: string; member_count?: number; tags?: Tag[]; }
 interface Task { id: number; title: string; status: string; priority: string; due_date?: string; project_name?: string; task_list_name?: string; tags?: Tag[]; }
-interface TicketNote { id: number; content: string; author_name?: string; created_at?: string; }
-interface Ticket { id: number; subject: string; content: string; status: string; priority: string; project_name?: string; department_name?: string; department_id?: number; assignee_name?: string; tags?: Tag[]; notes?: TicketNote[]; notes_count?: number; created_at?: string; }
+interface TicketNote { id: number; content: string; author_name?: string; user_name?: string; created_at?: string; }
+interface Ticket { id: number; subject: string; content: string; status: string; priority: string; project_name?: string; department_name?: string; department_id?: number; assignee_name?: string; ai_summary?: string; tags?: Tag[]; notes?: TicketNote[]; notes_count?: number; created_at?: string; }
 interface MessageItem { id: number; title?: string; content: string; project_name?: string; author_name?: string; created_at?: string; }
 interface FileItem { id: number; filename: string; url: string; project_name?: string; uploaded_by_name?: string; created_at?: string; }
 interface Department { id: number; name: string; color: string; description?: string; }
@@ -123,6 +123,9 @@ function App() {
     const [activeView, setActiveView] = useState(runtime.initialView || 'dashboard');
     const [ticketSaving, setTicketSaving] = useState(false);
     const [profileSaving, setProfileSaving] = useState(false);
+    const [ticketNoteSavingId, setTicketNoteSavingId] = useState<number | null>(null);
+    const [expandedTickets, setExpandedTickets] = useState<number[]>([]);
+    const [ticketNoteDrafts, setTicketNoteDrafts] = useState<Record<number, string>>({});
     const [ticketForm, setTicketForm] = useState({ subject: '', content: '', department_id: '', project_id: '', priority: 'medium', tags: '' });
     const [profileForm, setProfileForm] = useState({ first_name: '', last_name: '', email: '', password: '' });
 
@@ -183,6 +186,37 @@ function App() {
             await loadBootstrap();
         } catch (err: any) {
             alert(err.message || 'Unable to update the ticket.');
+        }
+    }
+
+    function toggleTicketNotes(ticketId: number) {
+        setExpandedTickets((prev) => prev.includes(ticketId) ? prev.filter((id) => id !== ticketId) : [...prev, ticketId]);
+    }
+
+    async function handleAddTicketNote(ticketId: number) {
+        const content = (ticketNoteDrafts[ticketId] || '').trim();
+        if (!content) return;
+
+        setTicketNoteSavingId(ticketId);
+        try {
+            const notes = await apiPost<TicketNote[]>(`/aosai/v1/tickets/${ticketId}/notes`, { content });
+            setData((prev) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    tickets: prev.tickets.map((ticket) => ticket.id === ticketId ? {
+                        ...ticket,
+                        notes: Array.isArray(notes) ? notes : (ticket.notes || []),
+                        notes_count: Array.isArray(notes) ? notes.length : (ticket.notes_count || 0),
+                    } : ticket),
+                };
+            });
+            setTicketNoteDrafts((prev) => ({ ...prev, [ticketId]: '' }));
+            setExpandedTickets((prev) => prev.includes(ticketId) ? prev : [...prev, ticketId]);
+        } catch (err: any) {
+            alert(err.message || 'Unable to add the note.');
+        } finally {
+            setTicketNoteSavingId(null);
         }
     }
 
@@ -300,7 +334,7 @@ function App() {
                             <>
                                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                                     <StatCard label="Projects" value={data.stats.projects} help="Active workspaces you can access" />
-                                    <StatCard label="Tasks" value={data.stats.tasks} help="Work items currently assigned" />
+                                    <StatCard label="Tasks" value={data.stats.tasks} help="Visible work items across this workspace" />
                                     <StatCard label="Tickets" value={data.stats.tickets} help="Open support conversations" />
                                     <StatCard label="Messages" value={data.stats.messages} help="Recent collaboration updates" />
                                     <StatCard label="Overdue" value={data.stats.overdue_tasks} help="Tasks that need attention" />
@@ -420,6 +454,61 @@ function App() {
                                                 </div>
                                             </div>
                                             <div className="mt-4 flex flex-wrap gap-2">{(ticket.tags || []).map((tag) => <span key={tag.id} className="rounded-full px-3 py-1 text-xs text-white" style={{ backgroundColor: tag.color }}>{tag.name}</span>)}</div>
+                                            {ticket.ai_summary ? (
+                                                <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-500">AI Summary</p>
+                                                    <p className="mt-2 leading-6">{ticket.ai_summary}</p>
+                                                </div>
+                                            ) : null}
+                                            <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-900">Ticket notes</p>
+                                                        <p className="text-xs text-slate-500">{ticket.notes_count || 0} updates on this ticket</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleTicketNotes(ticket.id)}
+                                                        className="rounded-full border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-white"
+                                                    >
+                                                        {expandedTickets.includes(ticket.id) ? 'Hide notes' : 'View notes'}
+                                                    </button>
+                                                </div>
+                                                {expandedTickets.includes(ticket.id) ? (
+                                                    <div className="mt-4 space-y-4">
+                                                        <div className="space-y-3">
+                                                            {(ticket.notes || []).length > 0 ? (ticket.notes || []).map((note) => (
+                                                                <div key={note.id} className="rounded-2xl border border-white bg-white px-4 py-3">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <p className="text-sm font-medium text-slate-900">{note.author_name || note.user_name || 'Team member'}</p>
+                                                                        <p className="text-xs text-slate-400">{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</p>
+                                                                    </div>
+                                                                    <p className="mt-2 text-sm leading-6 text-slate-600">{note.content}</p>
+                                                                </div>
+                                                            )) : (
+                                                                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">No notes yet. Add the first update to keep everyone aligned.</div>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            <textarea
+                                                                value={ticketNoteDrafts[ticket.id] || ''}
+                                                                onChange={(e) => setTicketNoteDrafts((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
+                                                                rows={3}
+                                                                placeholder="Add an update, reply, or internal handoff note"
+                                                                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleAddTicketNote(ticket.id)}
+                                                                disabled={ticketNoteSavingId === ticket.id || !(ticketNoteDrafts[ticket.id] || '').trim()}
+                                                                className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                                            >
+                                                                {ticketNoteSavingId === ticket.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Add note
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -538,4 +627,3 @@ if (rootElement) {
         window.setTimeout(() => preloader.remove(), 260);
     });
 }
-

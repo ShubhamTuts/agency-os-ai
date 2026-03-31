@@ -29,9 +29,10 @@ class AOSAI_Project {
         $args = wp_parse_args( $args, $defaults );
         
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        
-        $where = "WHERE pu.user_id = %d";
-        $params = array( $user_id );
+
+        $has_manager_access = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' );
+        $where  = $has_manager_access ? 'WHERE 1=1' : "WHERE pu.user_id = %d";
+        $params = $has_manager_access ? array() : array( $user_id );
         
         if ( ! empty( $args['status'] ) ) {
             $where .= " AND p.status = %s";
@@ -50,14 +51,24 @@ class AOSAI_Project {
         $params[] = $args['per_page'];
         $params[] = $offset;
 
-        $sql = $wpdb->prepare(
-            "SELECT p.* FROM {$table} p
-            INNER JOIN {$pu_table} pu ON p.id = pu.project_id
-            {$where}
-            ORDER BY {$orderby}
-            LIMIT %d OFFSET %d",
-            ...$params
-        );
+        if ( $has_manager_access ) {
+            $sql = $wpdb->prepare(
+                "SELECT p.* FROM {$table} p
+                {$where}
+                ORDER BY {$orderby}
+                LIMIT %d OFFSET %d",
+                ...$params
+            );
+        } else {
+            $sql = $wpdb->prepare(
+                "SELECT p.* FROM {$table} p
+                INNER JOIN {$pu_table} pu ON p.id = pu.project_id
+                {$where}
+                ORDER BY {$orderby}
+                LIMIT %d OFFSET %d",
+                ...$params
+            );
+        }
         
         $projects = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -127,7 +138,12 @@ class AOSAI_Project {
             'object_id'  => $project_id,
         ) );
 
-        do_action( 'aosai_project_created', $project_id, $this->get( $project_id ) );
+        $project = $this->get( $project_id );
+        do_action( 'aosai_project_created', $project_id, $project );
+
+        if ( $project ) {
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'project.created', $project );
+        }
         
         return $project_id;
     }
@@ -174,7 +190,12 @@ class AOSAI_Project {
             'object_id'  => $id,
         ) );
 
-        do_action( 'aosai_project_updated', $id, $project, $this->get( $id ) );
+        $updated_project = $this->get( $id );
+        do_action( 'aosai_project_updated', $id, $project, $updated_project );
+
+        if ( $updated_project ) {
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'project.updated', $updated_project );
+        }
         
         return true;
     }

@@ -208,6 +208,8 @@ class AOSAI_Ticket {
                     )
                 );
             }
+
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'ticket.created', $ticket );
         }
 
         return $ticket_id;
@@ -249,6 +251,10 @@ class AOSAI_Ticket {
                 'object_id'   => $id,
             )
         );
+
+        if ( $updated_ticket ) {
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'ticket.updated', $updated_ticket );
+        }
 
         return true;
     }
@@ -292,7 +298,30 @@ class AOSAI_Ticket {
             return new \WP_Error( 'db_error', esc_html__( 'Failed to add ticket note.', 'agency-os-ai' ) );
         }
 
-        return (int) $wpdb->insert_id;
+        $note_id = (int) $wpdb->insert_id;
+        $note    = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT c.*, u.display_name AS author_name
+                FROM {$wpdb->prefix}aosai_comments c
+                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
+                WHERE c.id = %d",
+                $note_id
+            ),
+            ARRAY_A
+        );
+
+        AOSAI_Webhook_Service::get_instance()->dispatch(
+            'ticket.note_added',
+            array(
+                'ticket_id' => $ticket_id,
+                'note'      => $note ?: array(
+                    'id'      => $note_id,
+                    'content' => $content,
+                ),
+            )
+        );
+
+        return $note_id;
     }
 
     private function handle_automations_after_update( array $existing_ticket, array $updated_ticket ): void {

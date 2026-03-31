@@ -39,8 +39,11 @@ class AOSAI_Message {
         $args   = wp_parse_args( $args, $defaults );
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
 
-        $where  = "WHERE ( m.project_id = 0 OR pu.user_id = %d ) AND ( m.is_private = 0 OR m.created_by = %d )";
-        $params = array( $user_id, $user_id );
+        $has_manager_access = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' );
+        $where  = $has_manager_access
+            ? 'WHERE 1=1'
+            : "WHERE ( m.project_id = 0 OR pu.user_id = %d ) AND ( m.is_private = 0 OR m.created_by = %d )";
+        $params = $has_manager_access ? array() : array( $user_id, $user_id );
 
         if ( ! empty( $args['search'] ) ) {
             $search   = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';

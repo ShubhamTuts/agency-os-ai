@@ -63,7 +63,26 @@ class AOSAI_AI_Service {
         if ( ! $p || ! $p->is_configured() ) {
             return new \WP_Error( 'provider_unavailable', esc_html__( 'AI provider unavailable.', 'agency-os-ai' ) );
         }
-        return $p->suggest_description( $title, $context );
+        $user_id = get_current_user_id();
+        if ( $user_id > 0 && $this->is_rate_limited( $user_id ) ) {
+            return new \WP_Error( 'rate_limited', esc_html__( 'You have exceeded the AI request limit. Please try again later.', 'agency-os-ai' ) );
+        }
+
+        $result = $p->suggest_description( $title, $context );
+
+        if ( $user_id > 0 ) {
+            $this->log_usage(
+                $user_id,
+                $p,
+                array(
+                    'action' => 'suggest_description',
+                    'model'  => $p->get_default_model(),
+                ),
+                is_wp_error( $result ) ? $result : array( 'content' => (string) $result )
+            );
+        }
+
+        return $result;
     }
     
     public function chat( array $messages, array $params = array() ): array|\WP_Error {
@@ -71,7 +90,30 @@ class AOSAI_AI_Service {
         if ( ! $provider || ! $provider->is_configured() ) {
             return new \WP_Error( 'provider_unavailable', esc_html__( 'AI provider unavailable.', 'agency-os-ai' ) );
         }
-        return $provider->chat( $messages, $params );
+
+        $user_id = get_current_user_id();
+        if ( $user_id > 0 && $this->is_rate_limited( $user_id ) ) {
+            return new \WP_Error( 'rate_limited', esc_html__( 'You have exceeded the AI request limit. Please try again later.', 'agency-os-ai' ) );
+        }
+
+        $result = $provider->chat( $messages, $params );
+
+        if ( $user_id > 0 ) {
+            $this->log_usage(
+                $user_id,
+                $provider,
+                array_merge(
+                    $params,
+                    array(
+                        'action' => sanitize_key( $params['action'] ?? 'chat' ),
+                        'model'  => sanitize_text_field( $params['model'] ?? $provider->get_default_model() ),
+                    )
+                ),
+                $result
+            );
+        }
+
+        return $result;
     }
     
     private function is_rate_limited( int $user_id ): bool {

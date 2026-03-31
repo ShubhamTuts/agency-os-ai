@@ -109,39 +109,69 @@ class AOSAI_Task {
         $pu_table = $wpdb->prefix . 'aosai_project_users';
         
         $defaults = array(
-            'page'     => 1,
-            'per_page' => 20,
-            'status'   => '',
+            'page'                   => 1,
+            'per_page'               => 20,
+            'status'                 => '',
+            'include_all_if_manager' => false,
         );
         $args = wp_parse_args( $args, $defaults );
         
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        
-        $where = "WHERE tu.user_id = %d AND p.id IS NOT NULL";
-        // Params for the WHERE clause
-        $params = array( $user_id );
-        
-        if ( ! empty( $args['status'] ) ) {
-            $statuses = array_map('trim', explode(',', $args['status']));
-            $placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
-            $where .= " AND t.status IN ($placeholders)";
-            $params = array_merge($params, $statuses);
-        }
-        
-        // Final ordered parameters for wpdb->prepare
-        $final_params = array_merge( array( $user_id ), $params, array( $args['per_page'], $offset ) );
 
-        $sql = $wpdb->prepare(
-            "SELECT t.*, p.title as project_name, p.color as project_color
-            FROM {$table} t
-            INNER JOIN {$tu_table} tu ON t.id = tu.task_id
-            INNER JOIN {$pu_table} pu ON t.project_id = pu.project_id AND pu.user_id = %d
-            LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
-            {$where}
-            ORDER BY t.due_date ASC, FIELD(t.priority, 'urgent', 'high', 'medium', 'low')
-            LIMIT %d OFFSET %d",
-            ...$final_params
+        $has_workspace_scope = ! empty( $args['include_all_if_manager'] ) && (
+            user_can( $user_id, 'manage_options' ) ||
+            user_can( $user_id, 'aosai_manage_projects' ) ||
+            user_can( $user_id, 'aosai_manage_tickets' )
         );
+
+        if ( $has_workspace_scope ) {
+            $where  = 'WHERE p.id IS NOT NULL';
+            $params = array();
+
+            if ( ! empty( $args['status'] ) ) {
+                $statuses = array_map( 'trim', explode( ',', $args['status'] ) );
+                $placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+                $where .= " AND t.status IN ({$placeholders})";
+                $params = array_merge( $params, $statuses );
+            }
+
+            $params[] = $args['per_page'];
+            $params[] = $offset;
+
+            $sql = $wpdb->prepare(
+                "SELECT t.*, p.title as project_name, p.color as project_color
+                FROM {$table} t
+                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                {$where}
+                ORDER BY t.due_date ASC, FIELD(t.priority, 'urgent', 'high', 'medium', 'low')
+                LIMIT %d OFFSET %d",
+                ...$params
+            );
+        } else {
+            $where = "WHERE tu.user_id = %d AND p.id IS NOT NULL";
+            $params = array( $user_id );
+
+            if ( ! empty( $args['status'] ) ) {
+                $statuses = array_map( 'trim', explode( ',', $args['status'] ) );
+                $placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+                $where .= " AND t.status IN ({$placeholders})";
+                $params = array_merge( $params, $statuses );
+            }
+
+            $final_params = array_merge( array( $user_id ), $params, array( $args['per_page'], $offset ) );
+
+            $sql = $wpdb->prepare(
+                "SELECT t.*, p.title as project_name, p.color as project_color
+                FROM {$table} t
+                INNER JOIN {$tu_table} tu ON t.id = tu.task_id
+                INNER JOIN {$pu_table} pu ON t.project_id = pu.project_id AND pu.user_id = %d
+                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
+                {$where}
+                ORDER BY t.due_date ASC, FIELD(t.priority, 'urgent', 'high', 'medium', 'low')
+                LIMIT %d OFFSET %d",
+                ...$final_params
+            );
+        }
 
         $tasks = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -228,7 +258,12 @@ class AOSAI_Task {
             'object_id'  => $task_id,
         ) );
 
-        do_action( 'aosai_task_created', $task_id, $this->get( $task_id ) );
+        $task = $this->get( $task_id );
+        do_action( 'aosai_task_created', $task_id, $task );
+
+        if ( $task ) {
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'task.created', $task );
+        }
         
         return $task_id;
     }
@@ -286,7 +321,12 @@ class AOSAI_Task {
             'meta'       => array_diff_key( $data, array_flip( array( 'assignees' ) ) ),
         ) );
 
-        do_action( 'aosai_task_updated', $id, $task, $this->get( $id ) );
+        $updated_task = $this->get( $id );
+        do_action( 'aosai_task_updated', $id, $task, $updated_task );
+
+        if ( $updated_task ) {
+            AOSAI_Webhook_Service::get_instance()->dispatch( 'task.updated', $updated_task );
+        }
 
         if ( isset( $sanitized['status'] ) && in_array( $sanitized['status'], array( 'completed', 'done' ), true ) && ! in_array( $task['status'], array( 'completed', 'done' ), true ) ) {
             do_action( 'aosai_task_completed', $id, get_current_user_id() );
