@@ -125,10 +125,10 @@ class AOSAI_AI_Service {
     
     private function is_rate_limited( int $user_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_ai_logs';
+        $table = esc_sql( $wpdb->prefix . 'aosai_ai_logs' );
         $count = (int) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$table} WHERE user_id = %d AND created_at > %s",
+                'SELECT COUNT(*) FROM ' . $table . ' WHERE user_id = %d AND created_at > %s',
                 $user_id,
                 gmdate( 'Y-m-d H:i:s', strtotime( '-1 hour' ) )
             )
@@ -139,7 +139,7 @@ class AOSAI_AI_Service {
     
     private function log_usage( int $user_id, AOSAI_AI_Provider_Interface $provider, array $params, $result ): void {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_ai_logs';
+        $table = esc_sql( $wpdb->prefix . 'aosai_ai_logs' );
         
         $usage = is_wp_error( $result ) ? array() : ( $result['usage'] ?? array() );
         

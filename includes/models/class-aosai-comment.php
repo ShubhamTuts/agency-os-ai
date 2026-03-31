@@ -8,7 +8,7 @@ class AOSAI_Comment {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_comments';
+        return esc_sql( $wpdb->prefix . 'aosai_comments' );
     }
     
     private function enrich( array $comment ): array {
@@ -20,14 +20,15 @@ class AOSAI_Comment {
 
     public function get_comment( int $id ): ?array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $comment = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT c.*, u.display_name as author_name
-                FROM {$table} c
-                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
-                WHERE c.id = %d",
+                'SELECT c.*, u.display_name as author_name
+                FROM ' . $table . ' c
+                LEFT JOIN ' . $users_table . ' u ON c.created_by = u.ID
+                WHERE c.id = %d',
                 $id
             ),
             ARRAY_A
@@ -38,15 +39,16 @@ class AOSAI_Comment {
 
     public function get_comments( string $type, int $object_id ): array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $comments = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT c.*, u.display_name as author_name
-                FROM {$table} c
-                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
+                'SELECT c.*, u.display_name as author_name
+                FROM ' . $table . ' c
+                LEFT JOIN ' . $users_table . ' u ON c.created_by = u.ID
                 WHERE c.commentable_type = %s AND c.commentable_id = %d AND c.parent_id IS NULL
-                ORDER BY c.created_at ASC",
+                ORDER BY c.created_at ASC',
                 $type,
                 $object_id
             ),
@@ -57,15 +59,16 @@ class AOSAI_Comment {
 
     public function get_replies( int $parent_id ): array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $replies = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT c.*, u.display_name as author_name
-                FROM {$table} c
-                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
+                'SELECT c.*, u.display_name as author_name
+                FROM ' . $table . ' c
+                LEFT JOIN ' . $users_table . ' u ON c.created_by = u.ID
                 WHERE c.parent_id = %d
-                ORDER BY c.created_at ASC",
+                ORDER BY c.created_at ASC',
                 $parent_id
             ),
             ARRAY_A

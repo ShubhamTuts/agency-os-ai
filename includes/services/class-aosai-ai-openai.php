@@ -161,6 +161,7 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
         if ( is_wp_error( $response ) ) {
             return new \WP_Error(
                 'api_request_failed',
+                /* translators: %s: upstream API transport error message */
                 sprintf( esc_html__( 'API request failed: %s', 'agency-os-ai' ), $response->get_error_message() )
             );
         }

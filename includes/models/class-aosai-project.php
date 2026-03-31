@@ -1,8 +1,22 @@
 <?php
+/**
+ * Project Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.0.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Project class
+ *
+ * Handles project CRUD operations with proper input sanitization.
+ *
+ * @since 1.0.0
+ */
 class AOSAI_Project {
     use AOSAI_Singleton;
     
@@ -10,13 +24,13 @@ class AOSAI_Project {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_projects';
+        return esc_sql( $wpdb->prefix . 'aosai_projects' );
     }
     
     public function get_user_projects( int $user_id, array $args = array() ): array {
         global $wpdb;
         $table = $this->get_table();
-        $pu_table = $wpdb->prefix . 'aosai_project_users';
+        $pu_table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
         
         $defaults = array(
             'page'     => 1,
@@ -28,47 +42,41 @@ class AOSAI_Project {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
 
         $has_manager_access = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' );
-        $where  = $has_manager_access ? 'WHERE 1=1' : "WHERE pu.user_id = %d";
-        $params = $has_manager_access ? array() : array( $user_id );
+        $params = array();
+        $sql    = 'SELECT p.* FROM ' . $table . ' p';
+
+        if ( ! $has_manager_access ) {
+            $sql .= ' INNER JOIN ' . $pu_table . ' pu ON p.id = pu.project_id';
+        }
+
+        $sql .= ' WHERE 1=1';
+        if ( ! $has_manager_access ) {
+            $sql .= ' AND pu.user_id = %d';
+            $params[] = $user_id;
+        }
         
         if ( ! empty( $args['status'] ) ) {
-            $where .= " AND p.status = %s";
+            $sql .= ' AND p.status = %s';
             $params[] = sanitize_key( $args['status'] );
         }
         
         if ( ! empty( $args['search'] ) ) {
             $search = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where .= " AND (p.title LIKE %s OR p.description LIKE %s)";
+            $sql .= ' AND (p.title LIKE %s OR p.description LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
-        
-        $orderby = sanitize_sql_orderby( $args['orderby'] . ' ' . $args['order'] );
-        
-        $params[] = $args['per_page'];
-        $params[] = $offset;
 
-        if ( $has_manager_access ) {
-            $sql = $wpdb->prepare(
-                "SELECT p.* FROM {$table} p
-                {$where}
-                ORDER BY {$orderby}
-                LIMIT %d OFFSET %d",
-                ...$params
-            );
-        } else {
-            $sql = $wpdb->prepare(
-                "SELECT p.* FROM {$table} p
-                INNER JOIN {$pu_table} pu ON p.id = pu.project_id
-                {$where}
-                ORDER BY {$orderby}
-                LIMIT %d OFFSET %d",
-                ...$params
-            );
-        }
+        $sql .= ' ORDER BY ' . $this->get_order_clause( (string) $args['orderby'], (string) $args['order'] );
+        $sql .= ' LIMIT %d OFFSET %d';
+        $params[] = $per_page;
+        $params[] = $offset;
+        $sql = $wpdb->prepare( $sql, $params );
         
         $projects = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -84,7 +92,7 @@ class AOSAI_Project {
         $table = $this->get_table();
         
         $project = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -202,24 +210,33 @@ class AOSAI_Project {
     
     public function delete( int $id ): bool {
         global $wpdb;
-        $table = $this->get_table();
-        $prefix = $wpdb->prefix;
+        $table             = $this->get_table();
+        $activities_table  = esc_sql( $wpdb->prefix . 'aosai_activities' );
+        $comments_table    = esc_sql( $wpdb->prefix . 'aosai_comments' );
+        $files_table       = esc_sql( $wpdb->prefix . 'aosai_files' );
+        $messages_table    = esc_sql( $wpdb->prefix . 'aosai_messages' );
+        $task_users_table  = esc_sql( $wpdb->prefix . 'aosai_task_users' );
+        $task_meta_table   = esc_sql( $wpdb->prefix . 'aosai_task_meta' );
+        $tasks_table       = esc_sql( $wpdb->prefix . 'aosai_tasks' );
+        $task_lists_table  = esc_sql( $wpdb->prefix . 'aosai_task_lists' );
+        $milestones_table  = esc_sql( $wpdb->prefix . 'aosai_milestones' );
+        $project_users_table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
         
         $project = $this->get( $id );
         if ( ! $project ) {
             return false;
         }
         
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_activities WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_comments WHERE commentable_type = 'project' AND commentable_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_files WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_messages WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_task_users WHERE task_id IN (SELECT id FROM {$prefix}aosai_tasks WHERE project_id = %d)", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_task_meta WHERE task_id IN (SELECT id FROM {$prefix}aosai_tasks WHERE project_id = %d)", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_tasks WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_task_lists WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_milestones WHERE project_id = %d", $id ) );
-        $wpdb->query( $wpdb->prepare( "DELETE FROM {$prefix}aosai_project_users WHERE project_id = %d", $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $activities_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $comments_table . " WHERE commentable_type = 'project' AND commentable_id = %d", $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $files_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $messages_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $task_users_table . ' WHERE task_id IN (SELECT id FROM ' . $tasks_table . ' WHERE project_id = %d)', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $task_meta_table . ' WHERE task_id IN (SELECT id FROM ' . $tasks_table . ' WHERE project_id = %d)', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $tasks_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $task_lists_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $milestones_table . ' WHERE project_id = %d', $id ) );
+        $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $project_users_table . ' WHERE project_id = %d', $id ) );
         
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
         
@@ -228,14 +245,15 @@ class AOSAI_Project {
     
     public function get_members( int $project_id ): array {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_project_users';
+        $table       = esc_sql( $wpdb->prefix . 'aosai_project_users' );
+        $users_table = esc_sql( $wpdb->users );
         
         $members = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT pu.*, u.display_name, u.user_email 
-                FROM {$table} pu 
-                INNER JOIN {$wpdb->users} u ON pu.user_id = u.ID 
-                WHERE pu.project_id = %d",
+                'SELECT pu.*, u.display_name, u.user_email
+                FROM ' . $table . ' pu
+                INNER JOIN ' . $users_table . ' u ON pu.user_id = u.ID
+                WHERE pu.project_id = %d',
                 $project_id
             ),
             ARRAY_A
@@ -250,11 +268,11 @@ class AOSAI_Project {
     
     public function add_member( int $project_id, int $user_id, string $role = 'member' ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_project_users';
+        $table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
         
         $existing = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id FROM {$table} WHERE project_id = %d AND user_id = %d",
+                'SELECT id FROM ' . $table . ' WHERE project_id = %d AND user_id = %d',
                 $project_id,
                 $user_id
             )
@@ -285,7 +303,7 @@ class AOSAI_Project {
     
     public function remove_member( int $project_id, int $user_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_project_users';
+        $table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
         
         $result = $wpdb->delete(
             $table,
@@ -298,22 +316,22 @@ class AOSAI_Project {
     
     public function get_stats( int $project_id ): array {
         global $wpdb;
-        $tasks_table = $wpdb->prefix . 'aosai_tasks';
-        $milestones_table = $wpdb->prefix . 'aosai_milestones';
-        $messages_table = $wpdb->prefix . 'aosai_messages';
-        $files_table = $wpdb->prefix . 'aosai_files';
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
+        $milestones_table = esc_sql( $wpdb->prefix . 'aosai_milestones' );
+        $messages_table = esc_sql( $wpdb->prefix . 'aosai_messages' );
+        $files_table = esc_sql( $wpdb->prefix . 'aosai_files' );
+        $sql = 'SELECT '
+            . '(SELECT COUNT(*) FROM ' . $tasks_table . ' WHERE project_id = %d) as total_tasks, '
+            . '(SELECT COUNT(*) FROM ' . $tasks_table . " WHERE project_id = %d AND status IN ('done','completed')) as completed_tasks, "
+            . '(SELECT COUNT(*) FROM ' . $tasks_table . " WHERE project_id = %d AND due_date < CURDATE() AND status NOT IN ('done','completed')) as overdue_tasks, "
+            . '(SELECT COUNT(*) FROM ' . $milestones_table . ' WHERE project_id = %d) as total_milestones, '
+            . '(SELECT COUNT(*) FROM ' . $milestones_table . " WHERE project_id = %d AND status = 'completed') as completed_milestones, "
+            . '(SELECT COUNT(*) FROM ' . $messages_table . ' WHERE project_id = %d) as total_messages, '
+            . '(SELECT COUNT(*) FROM ' . $files_table . ' WHERE project_id = %d) as total_files';
         
         $stats = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT 
-                    (SELECT COUNT(*) FROM {$tasks_table} WHERE project_id = %d) as total_tasks,
-                    (SELECT COUNT(*) FROM {$tasks_table} WHERE project_id = %d AND status IN ('done','completed')) as completed_tasks,
-                    (SELECT COUNT(*) FROM {$tasks_table} WHERE project_id = %d AND due_date < CURDATE() AND status NOT IN ('done','completed')) as overdue_tasks,
-                    (SELECT COUNT(*) FROM {$milestones_table} WHERE project_id = %d) as total_milestones,
-                    (SELECT COUNT(*) FROM {$milestones_table} WHERE project_id = %d AND status = 'completed') as completed_milestones,
-                    (SELECT COUNT(*) FROM {$messages_table} WHERE project_id = %d) as total_messages,
-                    (SELECT COUNT(*) FROM {$files_table} WHERE project_id = %d) as total_files
-                ",
+                $sql,
                 $project_id, $project_id, $project_id, $project_id, $project_id, $project_id, $project_id
             ),
             ARRAY_A
@@ -351,6 +369,22 @@ class AOSAI_Project {
         $project['tags']                  = AOSAI_Tag::get_instance()->get_object_tags( 'project', $id );
 
         return $project;
+    }
+
+    private function get_order_clause( string $orderby, string $order ): string {
+        $allowed = array(
+            'created_at' => 'p.created_at',
+            'updated_at' => 'p.updated_at',
+            'title'      => 'p.title',
+            'status'     => 'p.status',
+            'start_date' => 'p.start_date',
+            'end_date'   => 'p.end_date',
+        );
+
+        $column    = $allowed[ sanitize_key( $orderby ) ] ?? 'p.created_at';
+        $direction = 'ASC' === strtoupper( $order ) ? 'ASC' : 'DESC';
+
+        return $column . ' ' . $direction;
     }
 
     private function sanitize_input( array $input ): array {

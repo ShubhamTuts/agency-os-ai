@@ -1,8 +1,22 @@
 <?php
+/**
+ * Workflow Stage Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.5.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Workflow_Stage class
+ *
+ * Handles workflow stage CRUD operations for Kanban boards.
+ *
+ * @since 1.5.0
+ */
 class AOSAI_Workflow_Stage {
     use AOSAI_Singleton;
     
@@ -10,7 +24,7 @@ class AOSAI_Workflow_Stage {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_workflow_stages';
+        return esc_sql( $wpdb->prefix . 'aosai_workflow_stages' );
     }
     
     public function get_all( string $type = 'task' ): array {
@@ -18,7 +32,7 @@ class AOSAI_Workflow_Stage {
         $table = $this->get_table();
         
         $stages = $wpdb->get_results(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE type = %s ORDER BY sort_order ASC", $type ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE type = %s ORDER BY sort_order ASC', $type ),
             ARRAY_A
         );
         
@@ -30,7 +44,7 @@ class AOSAI_Workflow_Stage {
         $table = $this->get_table();
         
         $stage = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -52,7 +66,7 @@ class AOSAI_Workflow_Stage {
         }
         
         $max_order = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT MAX(sort_order) FROM {$table} WHERE type = %s", $sanitized['type'] )
+            $wpdb->prepare( 'SELECT MAX(sort_order) FROM ' . $table . ' WHERE type = %s', $sanitized['type'] )
         );
         
         $result = $wpdb->insert(

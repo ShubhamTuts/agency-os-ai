@@ -483,12 +483,15 @@ class AOSAI_REST_AI extends WP_REST_Controller {
 
         $action_items = array();
         if ( $overdue > 0 ) {
+            /* translators: %d: overdue task count */
             $action_items[] = sprintf( __( 'Triage %d overdue tasks and reassign blocked work.', 'agency-os-ai' ), $overdue );
         }
         if ( $blocked_count > 0 ) {
+            /* translators: %d: blocked item count */
             $action_items[] = sprintf( __( 'Review %d items sitting in backlog or review.', 'agency-os-ai' ), $blocked_count );
         }
         if ( $top_project && floatval( $top_project['progress'] ?? 0 ) < 50 ) {
+            /* translators: %s: project name */
             $action_items[] = sprintf( __( 'Push %s past the halfway mark this week.', 'agency-os-ai' ), sanitize_text_field( (string) $top_project['name'] ) );
         }
         if ( empty( $action_items ) ) {
@@ -508,15 +511,18 @@ class AOSAI_REST_AI extends WP_REST_Controller {
 
         $wins = array();
         if ( $top_member && ! empty( $top_member['name'] ) ) {
+            /* translators: %s: team member name */
             $wins[] = sprintf( __( '%s is leading the delivery pace.', 'agency-os-ai' ), sanitize_text_field( (string) $top_member['name'] ) );
         }
         if ( $top_project && ! empty( $top_project['name'] ) ) {
             $wins[] = sprintf(
+                /* translators: %s: project name */
                 __( '%s is currently the strongest project by progress.', 'agency-os-ai' ),
                 sanitize_text_field( (string) $top_project['name'] )
             );
         }
         if ( $completed > 0 ) {
+            /* translators: %d: completed task count */
             $wins[] = sprintf( __( '%d tasks have already been completed.', 'agency-os-ai' ), $completed );
         }
 
@@ -574,6 +580,7 @@ class AOSAI_REST_AI extends WP_REST_Controller {
         );
 
         if ( $overdue > 0 ) {
+            /* translators: %d: overdue task count */
             $summary_parts[] = sprintf( __( '%d overdue tasks still need recovery planning.', 'agency-os-ai' ), $overdue );
         } else {
             $summary_parts[] = __( 'No overdue work is currently blocking delivery.', 'agency-os-ai' );
@@ -581,10 +588,12 @@ class AOSAI_REST_AI extends WP_REST_Controller {
 
         $coaching_points = array();
         if ( $overdue > 0 ) {
+            /* translators: %d: overdue task count */
             $coaching_points[] = sprintf( __( 'Run a recovery pass on %d overdue tasks.', 'agency-os-ai' ), $overdue );
         }
         if ( $most_loaded && absint( $most_loaded['task_count'] ?? 0 ) > 6 ) {
             $coaching_points[] = sprintf(
+                /* translators: %s: teammate name */
                 __( 'Rebalance workload around %s.', 'agency-os-ai' ),
                 sanitize_text_field( (string) ( $most_loaded['display_name'] ?? $most_loaded['name'] ?? __( 'the busiest teammate', 'agency-os-ai' ) ) )
             );
@@ -609,11 +618,13 @@ class AOSAI_REST_AI extends WP_REST_Controller {
 
         $spotlight = $top_member && ! empty( $top_member['name'] )
             ? sprintf(
+                /* translators: 1: teammate name, 2: completed task count */
                 __( '%1$s is leading output with %2$d completed tasks.', 'agency-os-ai' ),
                 sanitize_text_field( (string) $top_member['name'] ),
                 absint( $top_member['completed'] ?? 0 )
             )
             : sprintf(
+                /* translators: %d: completed task count */
                 __( '%d tasks have already been completed across the workspace.', 'agency-os-ai' ),
                 $completed_tasks
             );

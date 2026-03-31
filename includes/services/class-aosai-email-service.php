@@ -32,10 +32,12 @@ class AOSAI_Email_Service {
         if ( $requester_email ) {
             $this->send_email(
                 $requester_email,
+                /* translators: %s: ticket subject */
                 sprintf( __( 'Ticket received: %s', 'agency-os-ai' ), $ticket['subject'] ),
                 $this->build_email_template(
                     array(
                         'heading'     => __( 'We received your ticket', 'agency-os-ai' ),
+                        /* translators: %s: ticket subject */
                         'intro'       => sprintf( __( 'Your request "%s" is now in the queue.', 'agency-os-ai' ), $ticket['subject'] ),
                         'content'     => wp_trim_words( (string) $ticket['content'], 32 ),
                         'button_url'  => $portal_url,
@@ -48,10 +50,12 @@ class AOSAI_Email_Service {
         if ( $department_email && $department_email !== $requester_email ) {
             $this->send_email(
                 $department_email,
+                /* translators: %s: ticket subject */
                 sprintf( __( 'New support ticket: %s', 'agency-os-ai' ), $ticket['subject'] ),
                 $this->build_email_template(
                     array(
                         'heading'     => __( 'New ticket submitted', 'agency-os-ai' ),
+                        /* translators: %s: requester display name */
                         'intro'       => sprintf( __( '%s opened a new support request.', 'agency-os-ai' ), $ticket['requester_name'] ?? __( 'A portal user', 'agency-os-ai' ) ),
                         'content'     => wp_trim_words( (string) $ticket['content'], 40 ),
                         'button_url'  => $portal_url,
@@ -70,6 +74,7 @@ class AOSAI_Email_Service {
                 'project_id'  => $task['project_id'],
                 'type'        => 'task_assigned',
                 'title'       => sprintf(
+                    /* translators: 1: assigner name, 2: task title */
                     esc_html__( '%1$s assigned you to "%2$s"', 'agency-os-ai' ),
                     $assigner->display_name,
                     $task['title']
@@ -84,10 +89,12 @@ class AOSAI_Email_Service {
     public function send_ticket_assigned_email( \WP_User $user, array $ticket ): void {
         $this->send_email(
             $user->user_email,
+            /* translators: %s: ticket subject */
             sprintf( __( 'Ticket assigned: %s', 'agency-os-ai' ), $ticket['subject'] ),
             $this->build_email_template(
                 array(
                     'heading'     => __( 'A ticket was assigned to you', 'agency-os-ai' ),
+                    /* translators: %s: ticket subject */
                     'intro'       => sprintf( __( 'You are now responsible for ticket "%s".', 'agency-os-ai' ), $ticket['subject'] ),
                     'content'     => wp_trim_words( (string) $ticket['content'], 36 ),
                     'button_url'  => aosai_get_ticket_page_url(),
@@ -105,11 +112,13 @@ class AOSAI_Email_Service {
 
         $this->send_email(
             $requester_email,
+            /* translators: %s: ticket subject */
             sprintf( __( 'Ticket update: %s', 'agency-os-ai' ), $ticket['subject'] ),
             $this->build_email_template(
                 array(
                     'heading'     => __( 'Your ticket has been updated', 'agency-os-ai' ),
                     'intro'       => sprintf(
+                        /* translators: 1: previous ticket status, 2: new ticket status */
                         __( 'Status changed from %1$s to %2$s.', 'agency-os-ai' ),
                         ucwords( str_replace( '_', ' ', $previous_status ) ),
                         ucwords( str_replace( '_', ' ', (string) ( $ticket['status'] ?? 'open' ) ) )
@@ -206,9 +215,9 @@ class AOSAI_Email_Service {
                 <p><?php echo wp_kses_post( $intro ); ?></p>
             <?php endif; ?>
             <?php if ( '' !== $content ) : ?>
-                <div class="card"><?php echo wpautop( $content ); ?></div>
+                <div class="card"><?php echo wp_kses_post( wpautop( $content ) ); ?></div>
             <?php endif; ?>
-            <a href="<?php echo $button_url; ?>" class="btn"><?php echo esc_html( $button_text ); ?></a>
+            <a href="<?php echo esc_url( $button_url ); ?>" class="btn"><?php echo esc_html( $button_text ); ?></a>
         </div>
         <div class="footer">
             <?php echo esc_html( $footer_text ); ?>

@@ -49,7 +49,7 @@ class AOSAI_Plugin {
         $controllers = array(
             'projects', 'tasks', 'task-lists', 'milestones', 'messages',
             'comments', 'files', 'activities', 'ai', 'settings', 'users', 'reports', 'profile',
-            'portal', 'tickets', 'departments', 'tags', 'webhooks', 'inbound',
+            'portal', 'tickets', 'departments', 'tags', 'webhooks', 'inbound', 'notifications',
             'clients', 'invoices', 'time-entries',
         );
         foreach ( $controllers as $ctrl ) {
@@ -58,8 +58,7 @@ class AOSAI_Plugin {
     }
 
     private function set_locale() {
-        $i18n = new AOSAI_i18n();
-        $this->loader->add_action( 'init', $i18n, 'load_plugin_textdomain' );
+        // WordPress handles plugin translation loading automatically.
     }
 
     private function define_admin_hooks() {
@@ -105,6 +104,7 @@ class AOSAI_Plugin {
             new AOSAI_REST_Tags(),
             new AOSAI_REST_Webhooks(),
             new AOSAI_REST_Inbound(),
+            new AOSAI_REST_Notifications(),
             new AOSAI_REST_Clients(),
             new AOSAI_REST_Invoices(),
             new AOSAI_REST_Time_Entries(),

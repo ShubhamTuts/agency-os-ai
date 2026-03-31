@@ -10,19 +10,19 @@ class AOSAI_Department {
 
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_departments';
+        return esc_sql( $wpdb->prefix . 'aosai_departments' );
     }
 
     public function get_all(): array {
         global $wpdb;
         $table = $this->get_table();
-        return $wpdb->get_results( "SELECT * FROM {$table} ORDER BY is_default DESC, name ASC", ARRAY_A ) ?: array();
+        return $wpdb->get_results( 'SELECT * FROM ' . $table . ' ORDER BY is_default DESC, name ASC', ARRAY_A ) ?: array();
     }
 
     public function get( int $id ): ?array {
         global $wpdb;
         $table = $this->get_table();
-        $row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+        $row   = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ), ARRAY_A );
         return $row ?: null;
     }
 

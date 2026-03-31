@@ -541,6 +541,7 @@ CREATE TABLE {$prefix}aosai_time_entries (
             'aosai_ticket_default_priority'    => 'medium',
             'aosai_portal_dashboard_layout'    => 'split',
             'aosai_login_tracking_enabled'     => 'yes',
+            'aosai_role_access_matrix'         => self::get_default_role_access_matrix(),
             'aosai_smtp_enabled'           => 'no',
             'aosai_smtp_host'              => '',
             'aosai_smtp_port'              => 587,
@@ -586,10 +587,17 @@ CREATE TABLE {$prefix}aosai_time_entries (
 
     public static function add_capabilities() {
         $admin  = get_role( 'administrator' );
-        $editor = get_role( 'editor' );
-        $author = get_role( 'author' );
+        if ( $admin ) {
+            foreach ( self::get_plugin_capabilities() as $cap ) {
+                $admin->add_cap( $cap );
+            }
+        }
 
-        $admin_caps = array(
+        self::apply_role_access_matrix();
+    }
+
+    public static function get_plugin_capabilities(): array {
+        return array(
             'aosai_manage_projects',
             'aosai_manage_tasks',
             'aosai_manage_milestones',
@@ -605,38 +613,58 @@ CREATE TABLE {$prefix}aosai_time_entries (
             'aosai_manage_tags',
             'aosai_manage_own_tickets',
         );
+    }
 
-        foreach ( $admin_caps as $cap ) {
-            if ( $admin ) {
-                $admin->add_cap( $cap );
-            }
+    public static function get_default_role_access_matrix(): array {
+        $all_caps = array_fill_keys( self::get_plugin_capabilities(), true );
 
-            if ( $editor ) {
-                $editor->add_cap( $cap );
-            }
+        return array(
+            'editor' => $all_caps,
+            'author' => array(
+                'aosai_manage_tasks'       => true,
+                'aosai_manage_messages'    => true,
+                'aosai_manage_files'       => true,
+                'aosai_use_ai'             => true,
+                'aosai_access_portal'      => true,
+                'aosai_submit_tickets'     => true,
+                'aosai_manage_own_tickets' => true,
+            ),
+            'aosai_employee' => array(
+                'aosai_access_portal'      => true,
+                'aosai_submit_tickets'     => true,
+                'aosai_manage_own_tickets' => true,
+            ),
+            'aosai_client' => array(
+                'aosai_access_portal'  => true,
+                'aosai_submit_tickets' => true,
+            ),
+        );
+    }
+
+    public static function apply_role_access_matrix( ?array $matrix = null ): void {
+        if ( null === $matrix ) {
+            $stored = get_option( 'aosai_role_access_matrix', self::get_default_role_access_matrix() );
+            $matrix = is_array( $stored ) ? $stored : self::get_default_role_access_matrix();
         }
 
-        if ( $author ) {
-            $author->add_cap( 'aosai_manage_tasks' );
-            $author->add_cap( 'aosai_manage_messages' );
-            $author->add_cap( 'aosai_manage_files' );
-            $author->add_cap( 'aosai_use_ai' );
-            $author->add_cap( 'aosai_access_portal' );
-            $author->add_cap( 'aosai_submit_tickets' );
-            $author->add_cap( 'aosai_manage_own_tickets' );
-        }
+        $managed_roles = array_keys( self::get_default_role_access_matrix() );
+        $plugin_caps   = self::get_plugin_capabilities();
 
-        foreach ( array( 'aosai_client', 'aosai_employee' ) as $role_name ) {
+        foreach ( $managed_roles as $role_name ) {
             $role = get_role( $role_name );
             if ( ! $role ) {
                 continue;
             }
 
-            $role->add_cap( 'aosai_access_portal' );
-            $role->add_cap( 'aosai_submit_tickets' );
+            foreach ( $plugin_caps as $cap ) {
+                $role->remove_cap( $cap );
+            }
 
-            if ( 'aosai_employee' === $role_name ) {
-                $role->add_cap( 'aosai_manage_own_tickets' );
+            $role_caps = is_array( $matrix[ $role_name ] ?? null ) ? $matrix[ $role_name ] : array();
+            foreach ( $plugin_caps as $cap ) {
+                if ( ! empty( $role_caps[ $cap ] ) ) {
+                    $role->add_cap( $cap );
+                }
             }
         }
     }

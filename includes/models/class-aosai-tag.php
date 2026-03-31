@@ -10,12 +10,12 @@ class AOSAI_Tag {
 
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_tags';
+        return esc_sql( $wpdb->prefix . 'aosai_tags' );
     }
 
     public function get_relation_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_tag_relations';
+        return esc_sql( $wpdb->prefix . 'aosai_tag_relations' );
     }
 
     public function get_all( string $type = '' ): array {
@@ -23,11 +23,11 @@ class AOSAI_Tag {
 
         $table = $this->get_table();
         if ( '' === $type ) {
-            return $wpdb->get_results( "SELECT * FROM {$table} ORDER BY name ASC", ARRAY_A ) ?: array();
+            return $wpdb->get_results( 'SELECT * FROM ' . $table . ' ORDER BY name ASC', ARRAY_A ) ?: array();
         }
 
         return $wpdb->get_results(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE type = %s ORDER BY name ASC", sanitize_key( $type ) ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE type = %s ORDER BY name ASC', sanitize_key( $type ) ),
             ARRAY_A
         ) ?: array();
     }
@@ -40,11 +40,11 @@ class AOSAI_Tag {
 
         return $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT t.*
-                FROM {$tags_table} t
-                INNER JOIN {$relations_table} r ON t.id = r.tag_id
+                'SELECT t.*
+                FROM ' . $tags_table . ' t
+                INNER JOIN ' . $relations_table . ' r ON t.id = r.tag_id
                 WHERE r.object_type = %s AND r.object_id = %d
-                ORDER BY t.name ASC",
+                ORDER BY t.name ASC',
                 sanitize_key( $object_type ),
                 $object_id
             ),
@@ -100,7 +100,7 @@ class AOSAI_Tag {
         $slug = sanitize_title( $name );
 
         $existing = $wpdb->get_var(
-            $wpdb->prepare( "SELECT id FROM {$table} WHERE type = %s AND slug = %s", $type, $slug )
+            $wpdb->prepare( 'SELECT id FROM ' . $table . ' WHERE type = %s AND slug = %s', $type, $slug )
         );
         if ( $existing ) {
             return (int) $existing;

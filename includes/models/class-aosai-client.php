@@ -1,8 +1,21 @@
 <?php
+/**
+ * Client Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Client class
+ *
+ * Handles client CRUD operations with proper input sanitization.
+ *
+ * @noinspection PhpNoReturnAttributeCanBeAddedInspection
+ */
 class AOSAI_Client {
     use AOSAI_Singleton;
     
@@ -10,7 +23,7 @@ class AOSAI_Client {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_clients';
+        return esc_sql( $wpdb->prefix . 'aosai_clients' );
     }
     
     public function get_all( array $args = array() ): array {
@@ -27,32 +40,30 @@ class AOSAI_Client {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        $where  = 'WHERE 1=1';
-        $params = array();
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array();
+        $sql      = 'SELECT * FROM ' . $table . ' WHERE 1=1';
         
         if ( ! empty( $args['status'] ) ) {
-            $where .= " AND status = %s";
+            $sql .= ' AND status = %s';
             $params[] = sanitize_key( $args['status'] );
         }
         
         if ( ! empty( $args['search'] ) ) {
             $search = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where .= " AND (name LIKE %s OR email LIKE %s OR company_name LIKE %s)";
+            $sql .= ' AND (name LIKE %s OR email LIKE %s OR company_name LIKE %s)';
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
         }
-        
-        $orderby = sanitize_sql_orderby( $args['orderby'] . ' ' . $args['order'] );
-        
-        $params[] = $args['per_page'];
+
+        $sql .= ' ORDER BY ' . $this->get_order_clause( (string) $args['orderby'], (string) $args['order'] );
+        $sql .= ' LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-        
-        $sql = $wpdb->prepare(
-            "SELECT * FROM {$table} {$where} ORDER BY {$orderby} LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
         
         $clients = $wpdb->get_results( $sql, ARRAY_A );
         
@@ -68,7 +79,7 @@ class AOSAI_Client {
         $table = $this->get_table();
         
         $client = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -84,7 +95,7 @@ class AOSAI_Client {
         $table = $this->get_table();
         
         $client = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE email = %s", sanitize_email( $email ) ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE email = %s', sanitize_email( $email ) ),
             ARRAY_A
         );
         
@@ -195,8 +206,8 @@ class AOSAI_Client {
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
         
         if ( $result !== false ) {
-            $wpdb->delete( $wpdb->prefix . 'aosai_client_users', array( 'client_id' => $id ), array( '%d' ) );
-            $wpdb->delete( $wpdb->prefix . 'aosai_client_projects', array( 'client_id' => $id ), array( '%d' ) );
+            $wpdb->delete( esc_sql( $wpdb->prefix . 'aosai_client_users' ), array( 'client_id' => $id ), array( '%d' ) );
+            $wpdb->delete( esc_sql( $wpdb->prefix . 'aosai_client_projects' ), array( 'client_id' => $id ), array( '%d' ) );
             do_action( 'aosai_client_deleted', $id, $client );
         }
         
@@ -205,14 +216,15 @@ class AOSAI_Client {
     
     public function get_client_users( int $client_id ): array {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_users';
+        $table       = esc_sql( $wpdb->prefix . 'aosai_client_users' );
+        $users_table = esc_sql( $wpdb->users );
         
         $users = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT cu.*, u.display_name, u.user_email, u.user_login 
-                FROM {$table} cu 
-                INNER JOIN {$wpdb->users} u ON cu.user_id = u.ID 
-                WHERE cu.client_id = %d",
+                'SELECT cu.*, u.display_name, u.user_email, u.user_login
+                FROM ' . $table . ' cu
+                INNER JOIN ' . $users_table . ' u ON cu.user_id = u.ID
+                WHERE cu.client_id = %d',
                 $client_id
             ),
             ARRAY_A
@@ -227,14 +239,15 @@ class AOSAI_Client {
     
     public function get_client_projects( int $client_id ): array {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_projects';
+        $table          = esc_sql( $wpdb->prefix . 'aosai_client_projects' );
+        $projects_table = esc_sql( $wpdb->prefix . 'aosai_projects' );
         
         $projects = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT cp.*, p.title as project_name, p.status as project_status 
-                FROM {$table} cp 
-                INNER JOIN {$wpdb->prefix}aosai_projects p ON cp.project_id = p.id 
-                WHERE cp.client_id = %d",
+                'SELECT cp.*, p.title as project_name, p.status as project_status
+                FROM ' . $table . ' cp
+                INNER JOIN ' . $projects_table . ' p ON cp.project_id = p.id
+                WHERE cp.client_id = %d',
                 $client_id
             ),
             ARRAY_A
@@ -245,11 +258,11 @@ class AOSAI_Client {
     
     public function add_user( int $client_id, int $user_id, string $role = 'contact' ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_users';
+        $table = esc_sql( $wpdb->prefix . 'aosai_client_users' );
         
         $existing = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id FROM {$table} WHERE client_id = %d AND user_id = %d",
+                'SELECT id FROM ' . $table . ' WHERE client_id = %d AND user_id = %d',
                 $client_id,
                 $user_id
             )
@@ -280,7 +293,7 @@ class AOSAI_Client {
     
     public function remove_user( int $client_id, int $user_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_users';
+        $table = esc_sql( $wpdb->prefix . 'aosai_client_users' );
         
         $result = $wpdb->delete(
             $table,
@@ -293,11 +306,11 @@ class AOSAI_Client {
     
     public function link_project( int $client_id, int $project_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_projects';
+        $table = esc_sql( $wpdb->prefix . 'aosai_client_projects' );
         
         $existing = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id FROM {$table} WHERE client_id = %d AND project_id = %d",
+                'SELECT id FROM ' . $table . ' WHERE client_id = %d AND project_id = %d',
                 $client_id,
                 $project_id
             )
@@ -321,7 +334,7 @@ class AOSAI_Client {
     
     public function unlink_project( int $client_id, int $project_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_client_projects';
+        $table = esc_sql( $wpdb->prefix . 'aosai_client_projects' );
         
         $result = $wpdb->delete(
             $table,
@@ -334,17 +347,19 @@ class AOSAI_Client {
     
     public function get_stats( int $client_id ): array {
         global $wpdb;
+        $client_projects_table = esc_sql( $wpdb->prefix . 'aosai_client_projects' );
+        $client_users_table    = esc_sql( $wpdb->prefix . 'aosai_client_users' );
         
         $project_count = (int) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}aosai_client_projects WHERE client_id = %d",
+                'SELECT COUNT(*) FROM ' . $client_projects_table . ' WHERE client_id = %d',
                 $client_id
             )
         );
         
         $user_count = (int) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}aosai_client_users WHERE client_id = %d",
+                'SELECT COUNT(*) FROM ' . $client_users_table . ' WHERE client_id = %d',
                 $client_id
             )
         );
@@ -375,6 +390,22 @@ class AOSAI_Client {
         }
         
         return $client;
+    }
+
+    private function get_order_clause( string $orderby, string $order ): string {
+        $allowed = array(
+            'name'         => 'name',
+            'company_name' => 'company_name',
+            'email'        => 'email',
+            'status'       => 'status',
+            'created_at'   => 'created_at',
+            'updated_at'   => 'updated_at',
+        );
+
+        $column    = $allowed[ sanitize_key( $orderby ) ] ?? 'created_at';
+        $direction = 'ASC' === strtoupper( $order ) ? 'ASC' : 'DESC';
+
+        return $column . ' ' . $direction;
     }
     
     private function sanitize_input( array $input ): array {

@@ -1,8 +1,22 @@
 <?php
+/**
+ * Email Template Model for Agency OS AI
+ *
+ * @package Agency_OS_AI
+ * @since 1.5.0
+ */
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/**
+ * AOSAI_Email_Template class
+ *
+ * Handles email template CRUD operations with variable substitution.
+ *
+ * @since 1.5.0
+ */
 class AOSAI_Email_Template {
     use AOSAI_Singleton;
     
@@ -10,7 +24,7 @@ class AOSAI_Email_Template {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_email_templates';
+        return esc_sql( $wpdb->prefix . 'aosai_email_templates' );
     }
     
     public function get_all( string $type = '' ): array {
@@ -19,12 +33,12 @@ class AOSAI_Email_Template {
         
         if ( ! empty( $type ) ) {
             $templates = $wpdb->get_results(
-                $wpdb->prepare( "SELECT * FROM {$table} WHERE type = %s OR is_default = 1 ORDER BY is_default DESC, name ASC", $type ),
+                $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE type = %s OR is_default = 1 ORDER BY is_default DESC, name ASC', $type ),
                 ARRAY_A
             );
         } else {
             $templates = $wpdb->get_results(
-                "SELECT * FROM {$table} ORDER BY type, name ASC",
+                'SELECT * FROM ' . $table . ' ORDER BY type, name ASC',
                 ARRAY_A
             );
         }
@@ -41,7 +55,7 @@ class AOSAI_Email_Template {
         $table = $this->get_table();
         
         $template = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -60,12 +74,12 @@ class AOSAI_Email_Template {
         
         if ( ! empty( $type ) ) {
             $template = $wpdb->get_row(
-                $wpdb->prepare( "SELECT * FROM {$table} WHERE slug = %s AND type = %s", $slug, $type ),
+                $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE slug = %s AND type = %s', $slug, $type ),
                 ARRAY_A
             );
         } else {
             $template = $wpdb->get_row(
-                $wpdb->prepare( "SELECT * FROM {$table} WHERE slug = %s LIMIT 1", $slug ),
+                $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE slug = %s LIMIT 1', $slug ),
                 ARRAY_A
             );
         }
