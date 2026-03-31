@@ -14,18 +14,7 @@ export default defineConfig({
                 'admin/index': resolve(__dirname, 'src/admin/index.tsx'),
                 'portal/index': resolve(__dirname, 'src/portal/index.tsx'),
             },
-            // Externalize React so the bundle uses WP's global React/ReactDOM.
-            // WordPress and plugins like Elementor load wp-element (which wraps
-            // the react/react-dom handles) on every admin page. Bundling our own
-            // React creates a second instance and causes hook dispatcher conflicts.
-            external: (id) => id === 'react' || id === 'react-dom' || id === 'react-dom/client' || id === 'react-dom/server',
             output: {
-                globals: {
-                    react: 'React',
-                    'react-dom': 'ReactDOM',
-                    'react-dom/client': 'ReactDOM',
-                    'react-dom/server': 'ReactDOMServer',
-                },
                 entryFileNames: '[name].js',
                 chunkFileNames: 'assets/[name]-[hash].js',
                 assetFileNames: 'assets/[name]-[hash][extname]',

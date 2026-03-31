@@ -28,7 +28,7 @@ class AOSAI_Admin {
         // Our Vite bundle externalizes React so it uses window.React / window.ReactDOM
         // at runtime. This ensures a single shared React instance even when other
         // plugins (Elementor, Gutenberg blocks, etc.) also load wp-element on the page.
-        $deps = array( 'react', 'react-dom' );
+        $deps = array();
 
         if ( $entry ) {
             wp_enqueue_script(

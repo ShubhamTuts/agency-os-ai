@@ -1,19 +1,16 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
-import { LoadingSpinner } from './components/ui/LoadingSpinner';
-
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Projects = lazy(() => import('./pages/Projects'));
-const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
-const TaskDetail = lazy(() => import('./pages/TaskDetail'));
-const Milestones = lazy(() => import('./pages/Milestones'));
-const Messages = lazy(() => import('./pages/Messages'));
-const Files = lazy(() => import('./pages/Files'));
-const Reports = lazy(() => import('./pages/Reports'));
-const Team = lazy(() => import('./pages/Team'));
-const Settings = lazy(() => import('./pages/Settings'));
-const AiPlayground = lazy(() => import('./pages/AiPlayground'));
-const Profile = lazy(() => import('./pages/Profile'));
+import Dashboard from './pages/Dashboard';
+import Projects from './pages/Projects';
+import ProjectDetail from './pages/ProjectDetail';
+import TaskDetail from './pages/TaskDetail';
+import Milestones from './pages/Milestones';
+import Messages from './pages/Messages';
+import Files from './pages/Files';
+import Reports from './pages/Reports';
+import Team from './pages/Team';
+import Settings from './pages/Settings';
+import AiPlayground from './pages/AiPlayground';
+import Profile from './pages/Profile';
 
 function ProRoute({ children }: { children: React.ReactNode }) {
     const isPro = (window as any).aosaiData?.isPro;
@@ -44,22 +41,20 @@ function ProRoute({ children }: { children: React.ReactNode }) {
 
 export function AppRouter() {
     return (
-        <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/projects" element={<Projects />} />
-                <Route path="/projects/:id/*" element={<ProjectDetail />} />
-                <Route path="/tasks/:id" element={<TaskDetail />} />
-                <Route path="/milestones" element={<Milestones />} />
-                <Route path="/messages" element={<Messages />} />
-                <Route path="/files" element={<Files />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/team" element={<Team />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/ai" element={<AiPlayground />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-        </Suspense>
+        <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:id/*" element={<ProjectDetail />} />
+            <Route path="/tasks/:id" element={<TaskDetail />} />
+            <Route path="/milestones" element={<Milestones />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/files" element={<Files />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/team" element={<Team />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/ai" element={<AiPlayground />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
     );
 }
