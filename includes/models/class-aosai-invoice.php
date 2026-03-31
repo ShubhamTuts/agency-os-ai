@@ -10,7 +10,7 @@ class AOSAI_Invoice {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_invoices';
+        return esc_sql( $wpdb->prefix . 'aosai_invoices' );
     }
     
     public function get_all( array $args = array() ): array {
@@ -29,41 +29,39 @@ class AOSAI_Invoice {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        $where  = 'WHERE 1=1';
-        $params = array();
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array();
+        $sql      = 'SELECT * FROM ' . $table . ' WHERE 1=1';
         
         if ( ! empty( $args['status'] ) ) {
-            $where .= " AND status = %s";
+            $sql .= ' AND status = %s';
             $params[] = sanitize_key( $args['status'] );
         }
         
         if ( ! empty( $args['client_id'] ) ) {
-            $where .= " AND client_id = %d";
+            $sql .= ' AND client_id = %d';
             $params[] = absint( $args['client_id'] );
         }
         
         if ( ! empty( $args['project_id'] ) ) {
-            $where .= " AND project_id = %d";
+            $sql .= ' AND project_id = %d';
             $params[] = absint( $args['project_id'] );
         }
         
         if ( ! empty( $args['search'] ) ) {
             $search = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where .= " AND (invoice_number LIKE %s OR title LIKE %s)";
+            $sql .= ' AND (invoice_number LIKE %s OR title LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
-        
-        $orderby = sanitize_sql_orderby( $args['orderby'] . ' ' . $args['order'] );
-        
-        $params[] = $args['per_page'];
+
+        $sql .= ' ORDER BY ' . $this->get_order_clause( (string) $args['orderby'], (string) $args['order'] );
+        $sql .= ' LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-        
-        $sql = $wpdb->prepare(
-            "SELECT * FROM {$table} {$where} ORDER BY {$orderby} LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
         
         $invoices = $wpdb->get_results( $sql, ARRAY_A );
         
@@ -79,7 +77,7 @@ class AOSAI_Invoice {
         $table = $this->get_table();
         
         $invoice = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -95,7 +93,7 @@ class AOSAI_Invoice {
         $table = $this->get_table();
         
         $invoice = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE invoice_number = %s", sanitize_text_field( $invoice_number ) ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE invoice_number = %s', sanitize_text_field( $invoice_number ) ),
             ARRAY_A
         );
         
@@ -216,7 +214,7 @@ class AOSAI_Invoice {
             return false;
         }
         
-        $wpdb->delete( $wpdb->prefix . 'aosai_invoice_items', array( 'invoice_id' => $id ), array( '%d' ) );
+        $wpdb->delete( esc_sql( $wpdb->prefix . 'aosai_invoice_items' ), array( 'invoice_id' => $id ), array( '%d' ) );
         
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
         
@@ -259,17 +257,17 @@ class AOSAI_Invoice {
     
     public function get_line_items( int $invoice_id ): array {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_invoice_items';
+        $table = esc_sql( $wpdb->prefix . 'aosai_invoice_items' );
         
         return $wpdb->get_results(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE invoice_id = %d ORDER BY sort_order ASC, id ASC", $invoice_id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE invoice_id = %d ORDER BY sort_order ASC, id ASC', $invoice_id ),
             ARRAY_A
         );
     }
     
     public function save_line_items( int $invoice_id, array $items ): void {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_invoice_items';
+        $table = esc_sql( $wpdb->prefix . 'aosai_invoice_items' );
         
         $wpdb->delete( $table, array( 'invoice_id' => $invoice_id ), array( '%d' ) );
         
@@ -298,13 +296,13 @@ class AOSAI_Invoice {
         $table = $this->get_table();
         
         $stats = $wpdb->get_row(
-            "SELECT 
+            'SELECT 
                 COUNT(*) as total_invoices,
-                SUM(CASE WHEN status = 'paid' THEN total_amount ELSE 0 END) as total_paid,
-                SUM(CASE WHEN status = 'pending' THEN total_amount ELSE 0 END) as total_pending,
-                SUM(CASE WHEN status = 'overdue' THEN total_amount ELSE 0 END) as total_overdue,
-                SUM(CASE WHEN status = 'draft' THEN total_amount ELSE 0 END) as total_draft
-            FROM {$table}",
+                SUM(CASE WHEN status = \'paid\' THEN total_amount ELSE 0 END) as total_paid,
+                SUM(CASE WHEN status = \'pending\' THEN total_amount ELSE 0 END) as total_pending,
+                SUM(CASE WHEN status = \'overdue\' THEN total_amount ELSE 0 END) as total_overdue,
+                SUM(CASE WHEN status = \'draft\' THEN total_amount ELSE 0 END) as total_draft
+            FROM ' . $table,
             ARRAY_A
         );
         
@@ -378,21 +376,39 @@ class AOSAI_Invoice {
         $year = gmdate( 'Y' );
         $prefix = 'INV-' . $year . '-';
         
-        $last_number = (int) $wpdb->get_var(
+        $last_invoice_number = (string) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT invoice_number FROM {$table} WHERE invoice_number LIKE %s ORDER BY id DESC LIMIT 1",
+                'SELECT invoice_number FROM ' . $table . ' WHERE invoice_number LIKE %s ORDER BY id DESC LIMIT 1',
                 $prefix . '%'
             )
         );
         
-        if ( $last_number ) {
-            $num = (int) str_replace( $prefix, '', $last_number );
+        if ( '' !== $last_invoice_number ) {
+            $num = (int) str_replace( $prefix, '', $last_invoice_number );
             $num++;
         } else {
             $num = 1;
         }
         
         return $prefix . str_pad( (string) $num, 4, '0', STR_PAD_LEFT );
+    }
+
+    private function get_order_clause( string $orderby, string $order ): string {
+        $allowed = array(
+            'created_at'     => 'created_at',
+            'updated_at'     => 'updated_at',
+            'invoice_number' => 'invoice_number',
+            'title'          => 'title',
+            'status'         => 'status',
+            'issue_date'     => 'issue_date',
+            'due_date'       => 'due_date',
+            'total_amount'   => 'total_amount',
+        );
+
+        $column    = $allowed[ sanitize_key( $orderby ) ] ?? 'created_at';
+        $direction = 'ASC' === strtoupper( $order ) ? 'ASC' : 'DESC';
+
+        return $column . ' ' . $direction;
     }
     
     private function sanitize_input( array $input ): array {

@@ -8,14 +8,14 @@ class AOSAI_Milestone {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_milestones';
+        return esc_sql( $wpdb->prefix . 'aosai_milestones' );
     }
     
     public function get_all_for_user( int $user_id, array $args = array() ): array {
         global $wpdb;
         $table    = $this->get_table();
-        $pu_table = $wpdb->prefix . 'aosai_project_users';
-        $p_table  = $wpdb->prefix . 'aosai_projects';
+        $pu_table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
+        $p_table  = esc_sql( $wpdb->prefix . 'aosai_projects' );
 
         $defaults = array(
             'page'     => 1,
@@ -25,28 +25,24 @@ class AOSAI_Milestone {
         $args   = wp_parse_args( $args, $defaults );
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
 
-        $where  = "WHERE pu.user_id = %d";
         $params = array( $user_id );
+        $sql    = 'SELECT m.*, p.title as project_title
+                FROM ' . $table . ' m
+                INNER JOIN ' . $p_table . ' p ON m.project_id = p.id
+                INNER JOIN ' . $pu_table . ' pu ON m.project_id = pu.project_id
+                WHERE pu.user_id = %d';
 
         if ( ! empty( $args['status'] ) ) {
-            $where   .= " AND m.status = %s";
+            $sql     .= ' AND m.status = %s';
             $params[] = sanitize_key( $args['status'] );
         }
 
+        $sql     .= ' ORDER BY m.due_date ASC LIMIT %d OFFSET %d';
         $params[] = $args['per_page'];
         $params[] = $offset;
 
         $milestones = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT m.*, p.title as project_title
-                FROM {$table} m
-                INNER JOIN {$p_table} p ON m.project_id = p.id
-                INNER JOIN {$pu_table} pu ON m.project_id = pu.project_id
-                {$where}
-                ORDER BY m.due_date ASC
-                LIMIT %d OFFSET %d",
-                ...$params
-            ),
+            $wpdb->prepare( $sql, $params ),
             ARRAY_A
         );
 
@@ -63,7 +59,7 @@ class AOSAI_Milestone {
 
         $milestones = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT * FROM {$table} WHERE project_id = %d ORDER BY sort_order ASC, due_date ASC",
+                'SELECT * FROM ' . $table . ' WHERE project_id = %d ORDER BY sort_order ASC, due_date ASC',
                 $project_id
             ),
             ARRAY_A
@@ -81,7 +77,7 @@ class AOSAI_Milestone {
         $table = $this->get_table();
 
         $milestone = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
 
@@ -98,8 +94,9 @@ class AOSAI_Milestone {
 
         if ( empty( $milestone['project_name'] ) && ! empty( $milestone['project_id'] ) ) {
             global $wpdb;
+            $projects_table = esc_sql( $wpdb->prefix . 'aosai_projects' );
             $milestone['project_name'] = (string) $wpdb->get_var(
-                $wpdb->prepare( "SELECT title FROM {$wpdb->prefix}aosai_projects WHERE id = %d", $milestone['project_id'] )
+                $wpdb->prepare( 'SELECT title FROM ' . $projects_table . ' WHERE id = %d', $milestone['project_id'] )
             );
         }
         
@@ -113,16 +110,16 @@ class AOSAI_Milestone {
     
     private function calculate_progress( int $milestone_id ): array {
         global $wpdb;
-        $tasks_table = $wpdb->prefix . 'aosai_tasks';
-        $lists_table = $wpdb->prefix . 'aosai_task_lists';
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
+        $lists_table = esc_sql( $wpdb->prefix . 'aosai_task_lists' );
         
         $stats = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT 
                     COUNT(t.id) as total,
                     SUM(CASE WHEN t.status IN ('done','completed') THEN 1 ELSE 0 END) as completed
-                FROM {$tasks_table} t
-                INNER JOIN {$lists_table} l ON t.task_list_id = l.id
+                FROM " . $tasks_table . " t
+                INNER JOIN " . $lists_table . " l ON t.task_list_id = l.id
                 WHERE l.milestone_id = %d",
                 $milestone_id
             ),
@@ -155,7 +152,7 @@ class AOSAI_Milestone {
         
         $max_order = $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COALESCE(MAX(sort_order), 0) FROM {$table} WHERE project_id = %d",
+                'SELECT COALESCE(MAX(sort_order), 0) FROM ' . $table . ' WHERE project_id = %d',
                 $sanitized['project_id']
             )
         );
@@ -228,7 +225,7 @@ class AOSAI_Milestone {
             return false;
         }
         
-        $lists_table = $wpdb->prefix . 'aosai_task_lists';
+        $lists_table = esc_sql( $wpdb->prefix . 'aosai_task_lists' );
         $wpdb->update( $lists_table, array( 'milestone_id' => null ), array( 'milestone_id' => $id ), array( '%d' ), array( '%d' ) );
         
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );

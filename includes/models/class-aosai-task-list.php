@@ -8,7 +8,7 @@ class AOSAI_Task_List {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_task_lists';
+        return esc_sql( $wpdb->prefix . 'aosai_task_lists' );
     }
     
     public function get_project_lists( int $project_id ): array {
@@ -17,7 +17,7 @@ class AOSAI_Task_List {
         
         $lists = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT * FROM {$table} WHERE project_id = %d ORDER BY sort_order ASC",
+                'SELECT * FROM ' . $table . ' WHERE project_id = %d ORDER BY sort_order ASC',
                 $project_id
             ),
             ARRAY_A
@@ -35,7 +35,7 @@ class AOSAI_Task_List {
         $table = $this->get_table();
         
         $list = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -62,7 +62,7 @@ class AOSAI_Task_List {
         
         $max_order = $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COALESCE(MAX(sort_order), 0) FROM {$table} WHERE project_id = %d",
+                'SELECT COALESCE(MAX(sort_order), 0) FROM ' . $table . ' WHERE project_id = %d',
                 $project_id
             )
         );
@@ -156,7 +156,7 @@ class AOSAI_Task_List {
             return false;
         }
         
-        $tasks_table = $wpdb->prefix . 'aosai_tasks';
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
         $wpdb->delete( $tasks_table, array( 'task_list_id' => $id ), array( '%d' ) );
         
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
@@ -175,15 +175,16 @@ class AOSAI_Task_List {
     
     private function get_list_tasks( int $list_id ): array {
         global $wpdb;
-        $tasks_table = $wpdb->prefix . 'aosai_tasks';
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
+        $users_table = esc_sql( $wpdb->users );
         
         return $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT t.*, u.display_name as creator_name 
-                FROM {$tasks_table} t 
-                LEFT JOIN {$wpdb->users} u ON t.created_by = u.ID 
-                WHERE t.task_list_id = %d 
-                ORDER BY t.sort_order ASC",
+                'SELECT t.*, u.display_name as creator_name
+                FROM ' . $tasks_table . ' t
+                LEFT JOIN ' . $users_table . ' u ON t.created_by = u.ID
+                WHERE t.task_list_id = %d
+                ORDER BY t.sort_order ASC',
                 $list_id
             ),
             ARRAY_A
@@ -192,10 +193,10 @@ class AOSAI_Task_List {
     
     private function calculate_progress( int $list_id ): float {
         global $wpdb;
-        $tasks_table = $wpdb->prefix . 'aosai_tasks';
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
         
         $total = $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$tasks_table} WHERE task_list_id = %d", $list_id )
+            $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $tasks_table . ' WHERE task_list_id = %d', $list_id )
         );
         
         if ( (int) $total === 0 ) {
@@ -203,7 +204,7 @@ class AOSAI_Task_List {
         }
         
         $completed = $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$tasks_table} WHERE task_list_id = %d AND status IN ('done','completed')", $list_id )
+            $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $tasks_table . " WHERE task_list_id = %d AND status IN ('done','completed')", $list_id )
         );
         
         return round( ( $completed / $total ) * 100, 1 );

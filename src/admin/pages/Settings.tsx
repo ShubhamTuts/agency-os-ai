@@ -34,6 +34,8 @@ interface LoginActivityItem {
     created_at: string;
 }
 
+type RoleAccessMatrix = Record<string, Record<string, boolean>>;
+
 interface SettingsState {
     openai_api_key: string;
     default_model: string;
@@ -78,6 +80,7 @@ interface SettingsState {
     ticket_default_priority: string;
     portal_dashboard_layout: string;
     login_tracking_enabled: boolean;
+    role_access_matrix: RoleAccessMatrix;
     portal_page_url?: string;
     portal_login_page_url?: string;
     portal_ticket_page_url?: string;
@@ -95,8 +98,32 @@ const DEFAULTS: SettingsState = {
     portal_name: '', portal_welcome_title: '', portal_welcome_text: '', portal_secondary_color: '#f59e0b',
     portal_page_id: 0, portal_login_page_id: 0, portal_ticket_page_id: 0,
     hide_admin_bar: true, force_frontend_dashboard: true, enable_pwa: true, show_footer_credit: false, footer_credit_text: '', ticket_ai_routing: true,
-    ticket_default_priority: 'medium', portal_dashboard_layout: 'split', login_tracking_enabled: true, shortcodes: [],
+    ticket_default_priority: 'medium', portal_dashboard_layout: 'split', login_tracking_enabled: true, role_access_matrix: {}, shortcodes: [],
 };
+
+const ROLE_ACCESS_LABELS: Record<string, string> = {
+    editor: 'Editor',
+    author: 'Author',
+    aosai_employee: 'Agency Employee',
+    aosai_client: 'Agency Client',
+};
+
+const ROLE_ACCESS_FIELDS = [
+    { key: 'aosai_manage_projects', label: 'Projects', description: 'Manage projects, clients, invoices, and workspace operations.' },
+    { key: 'aosai_manage_tasks', label: 'Tasks', description: 'Create and update tasks, boards, and workload execution.' },
+    { key: 'aosai_manage_milestones', label: 'Milestones', description: 'Control milestone planning and completion tracking.' },
+    { key: 'aosai_manage_messages', label: 'Messages', description: 'Post and manage internal collaboration threads.' },
+    { key: 'aosai_manage_files', label: 'Files', description: 'Upload and manage workspace file libraries.' },
+    { key: 'aosai_view_reports', label: 'Reports', description: 'Access reports, productivity, and team performance views.' },
+    { key: 'aosai_manage_settings', label: 'Settings', description: 'Change branding, portal, AI, email, and automation settings.' },
+    { key: 'aosai_use_ai', label: 'AI Tools', description: 'Use the AI workspace, quick assistant, and AI suggestions.' },
+    { key: 'aosai_access_portal', label: 'Portal Access', description: 'Open the frontend client or employee portal experience.' },
+    { key: 'aosai_submit_tickets', label: 'Submit Tickets', description: 'Create support tickets from the portal or workspace.' },
+    { key: 'aosai_manage_tickets', label: 'Manage Tickets', description: 'Triages and updates tickets across the workspace.' },
+    { key: 'aosai_manage_own_tickets', label: 'Own Tickets', description: 'Work assigned tickets without getting full helpdesk control.' },
+    { key: 'aosai_manage_departments', label: 'Departments', description: 'Maintain routing departments and support ownership.' },
+    { key: 'aosai_manage_tags', label: 'Tags', description: 'Create and manage tags used across projects and tickets.' },
+] as const;
 
 export default function Settings() {
     const [settings, setSettings] = useState<SettingsState>(DEFAULTS);
@@ -116,7 +143,7 @@ export default function Settings() {
     const [webhookForm, setWebhookForm] = useState({ name: '', url: '', events: 'all' });
     const [loginActivity, setLoginActivity] = useState<LoginActivityItem[]>([]);
     const [loginActivityLoading, setLoginActivityLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'email' | 'automation'>('company');
+    const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'access' | 'email' | 'automation'>('company');
 
     useEffect(() => {
         apiGet<SettingsState>('/aosai/v1/settings')
@@ -282,6 +309,7 @@ export default function Settings() {
         { id: 'company', label: 'Company', icon: Building2 },
         { id: 'portal', label: 'Portal', icon: PanelsTopLeft },
         { id: 'ai', label: 'AI', icon: Bot },
+        { id: 'access', label: 'Access', icon: ShieldCheck },
         { id: 'email', label: 'Email', icon: Mail },
         { id: 'automation', label: 'Automation', icon: Workflow },
     ] as const;
@@ -409,6 +437,72 @@ export default function Settings() {
                                     <input value={settings.timezone} onChange={(e) => setSettings((prev) => ({ ...prev, timezone: e.target.value }))} placeholder="Timezone e.g. Asia/Kolkata" className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
                                     <input value={settings.date_format} onChange={(e) => setSettings((prev) => ({ ...prev, date_format: e.target.value }))} placeholder="Date format e.g. F j, Y" className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm" />
                                     <select value={settings.portal_dashboard_layout} onChange={(e) => setSettings((prev) => ({ ...prev, portal_dashboard_layout: e.target.value }))} className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm"><option value="split">Split</option><option value="compact">Compact</option><option value="stacked">Stacked</option></select>
+                                </div>
+                            </section>
+                        </div>
+                    )}
+
+                    {activeTab === 'access' && (
+                        <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Role Access Matrix</h2>
+                                <p className="mt-2 text-sm text-gray-500">Control which managed roles can use core workspace tools. Administrator access remains fully enabled for recovery and platform ownership.</p>
+                                <div className="mt-6 space-y-5">
+                                    {Object.entries(ROLE_ACCESS_LABELS).map(([roleKey, roleLabel]) => (
+                                        <div key={roleKey} className="rounded-3xl border border-gray-200 p-5">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <h3 className="text-base font-semibold text-gray-900">{roleLabel}</h3>
+                                                    <p className="mt-1 text-sm text-gray-500">Choose the exact workspace capabilities available to this role.</p>
+                                                </div>
+                                                <ShieldCheck className="h-5 w-5 text-gray-400" />
+                                            </div>
+                                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                                {ROLE_ACCESS_FIELDS.map((field) => (
+                                                    <label key={`${roleKey}-${field.key}`} className="flex items-start justify-between gap-4 rounded-2xl border border-gray-200 px-4 py-3 text-sm">
+                                                        <span>
+                                                            <strong className="block text-gray-900">{field.label}</strong>
+                                                            <span className="mt-1 block text-xs text-gray-500">{field.description}</span>
+                                                        </span>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!!settings.role_access_matrix?.[roleKey]?.[field.key]}
+                                                            onChange={(e) =>
+                                                                setSettings((prev) => ({
+                                                                    ...prev,
+                                                                    role_access_matrix: {
+                                                                        ...(prev.role_access_matrix || {}),
+                                                                        [roleKey]: {
+                                                                            ...(prev.role_access_matrix?.[roleKey] || {}),
+                                                                            [field.key]: e.target.checked,
+                                                                        },
+                                                                    },
+                                                                }))
+                                                            }
+                                                        />
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Access Design Notes</h2>
+                                <div className="mt-5 space-y-4 text-sm text-gray-600">
+                                    <div className="rounded-2xl border border-gray-200 px-4 py-4">
+                                        Use this to shape client-safe, employee-safe, and manager-friendly access without editing PHP capabilities by hand.
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 px-4 py-4">
+                                        Keep `Portal Access` and `Submit Tickets` enabled for client-facing roles if they should continue using the branded frontend workspace.
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 px-4 py-4">
+                                        `Manage Projects` also unlocks the broader commercial workspace such as clients, invoices, and time tracking because those modules share the core operations capability.
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 px-4 py-4">
+                                        Save once after changes and the role matrix is applied immediately across WordPress roles.
+                                    </div>
                                 </div>
                             </section>
                         </div>

@@ -12,7 +12,7 @@ class AOSAI_Login_Activity {
 
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_login_activity';
+        return esc_sql( $wpdb->prefix . 'aosai_login_activity' );
     }
 
     public function ensure_table(): void {
@@ -136,36 +136,31 @@ class AOSAI_Login_Activity {
         $per_page = min( 100, max( 1, absint( $args['per_page'] ) ) );
         $offset  = ( $page - 1 ) * $per_page;
 
-        $where   = 'WHERE 1=1';
-        $params  = array();
+        $params = array();
+        $sql    = 'SELECT id, user_id, user_login, portal_type, event_type, ip_address, user_agent, created_at
+            FROM ' . $table . ' WHERE 1=1';
 
         if ( absint( $args['user_id'] ) > 0 ) {
-            $where   .= ' AND user_id = %d';
+            $sql     .= ' AND user_id = %d';
             $params[] = absint( $args['user_id'] );
         }
 
         if ( '' !== (string) $args['event_type'] ) {
-            $where   .= ' AND event_type = %s';
+            $sql     .= ' AND event_type = %s';
             $params[] = sanitize_key( (string) $args['event_type'] );
         }
 
         if ( '' !== (string) $args['portal_type'] ) {
-            $where   .= ' AND portal_type = %s';
+            $sql     .= ' AND portal_type = %s';
             $params[] = sanitize_key( (string) $args['portal_type'] );
         }
 
+        $sql     .= ' ORDER BY id DESC LIMIT %d OFFSET %d';
         $params[] = $per_page;
         $params[] = $offset;
 
         $rows = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, user_id, user_login, portal_type, event_type, ip_address, user_agent, created_at
-                FROM {$table}
-                {$where}
-                ORDER BY id DESC
-                LIMIT %d OFFSET %d",
-                ...$params
-            ),
+            $wpdb->prepare( $sql, $params ),
             ARRAY_A
         );
 

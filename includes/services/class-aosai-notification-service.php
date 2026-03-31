@@ -7,10 +7,16 @@ class AOSAI_Notification_Service {
     use AOSAI_Singleton;
     
     private function __construct() {}
+
+    private function get_table(): string {
+        global $wpdb;
+
+        return esc_sql( $wpdb->prefix . 'aosai_notifications' );
+    }
     
     public function create_notification( array $args ): void {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_notifications';
+        $table = $this->get_table();
         
         $wpdb->insert(
             $table,
@@ -33,7 +39,7 @@ class AOSAI_Notification_Service {
     
     public function get_user_notifications( int $user_id, array $args = array() ): array {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_notifications';
+        $table = $this->get_table();
         
         $defaults = array(
             'page'     => 1,
@@ -42,34 +48,48 @@ class AOSAI_Notification_Service {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        $where = "WHERE user_id = %d";
-        $params = array( $user_id );
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array( $user_id );
+        $sql      = 'SELECT * FROM ' . $table . ' WHERE user_id = %d';
         
         if ( $args['is_read'] !== null ) {
-            $where .= " AND is_read = %d";
+            $sql .= ' AND is_read = %d';
             $params[] = $args['is_read'] ? 1 : 0;
         }
         
-        $params[] = $args['per_page'];
+        $sql .= ' ORDER BY created_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
         
         return $wpdb->get_results(
+            $wpdb->prepare( $sql, $params ),
+            ARRAY_A
+        );
+    }
+
+    public function get_notification( int $notification_id ): ?array {
+        global $wpdb;
+
+        $notification = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT * FROM {$table} {$where} ORDER BY created_at DESC LIMIT %d OFFSET %d",
-                ...$params
+                'SELECT * FROM ' . $this->get_table() . ' WHERE id = %d',
+                $notification_id
             ),
             ARRAY_A
         );
+
+        return $notification ?: null;
     }
     
     public function get_unread_count( int $user_id ): int {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_notifications';
+        $table = $this->get_table();
         
         return (int) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$table} WHERE user_id = %d AND is_read = 0",
+                'SELECT COUNT(*) FROM ' . $table . ' WHERE user_id = %d AND is_read = 0',
                 $user_id
             )
         );
@@ -77,7 +97,7 @@ class AOSAI_Notification_Service {
     
     public function mark_as_read( int $notification_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_notifications';
+        $table = $this->get_table();
         
         $result = $wpdb->update(
             $table,
@@ -92,7 +112,7 @@ class AOSAI_Notification_Service {
     
     public function mark_all_as_read( int $user_id ): bool {
         global $wpdb;
-        $table = $wpdb->prefix . 'aosai_notifications';
+        $table = $this->get_table();
         
         $result = $wpdb->update(
             $table,
@@ -118,6 +138,7 @@ class AOSAI_Notification_Service {
             'project_id'  => $task['project_id'],
             'type'        => 'task_assigned',
             'title'       => sprintf(
+                /* translators: 1: assigner name, 2: task title */
                 esc_html__( '%1$s assigned you to "%2$s"', 'agency-os-ai' ),
                 $assigner->display_name,
                 $task['title']
@@ -138,6 +159,7 @@ class AOSAI_Notification_Service {
             'project_id'  => $task['project_id'],
             'type'        => 'task_completed',
             'title'       => sprintf(
+                /* translators: %s: task title */
                 esc_html__( 'Task "%1$s" was marked as complete', 'agency-os-ai' ),
                 $task['title']
             ),
@@ -170,6 +192,7 @@ class AOSAI_Notification_Service {
             'project_id'  => $project_id,
             'type'        => 'comment_added',
             'title'       => sprintf(
+                /* translators: %s: commenter name */
                 esc_html__( '%1$s commented on a task', 'agency-os-ai' ),
                 $comment['author_name']
             ),
@@ -188,6 +211,7 @@ class AOSAI_Notification_Service {
             'project_id'  => $milestone->project_id,
             'type'        => 'milestone_complete',
             'title'       => sprintf(
+                /* translators: %s: milestone title */
                 esc_html__( 'Milestone "%s" was completed', 'agency-os-ai' ),
                 $milestone->title
             ),
@@ -217,6 +241,7 @@ class AOSAI_Notification_Service {
                 'project_id'  => $project_id,
                 'type'        => 'message_posted',
                 'title'       => sprintf(
+                    /* translators: %s: project title */
                     esc_html__( 'New message in %s', 'agency-os-ai' ),
                     $project['title']
                 ),

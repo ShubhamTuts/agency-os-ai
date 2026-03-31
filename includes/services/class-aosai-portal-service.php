@@ -186,22 +186,19 @@ class AOSAI_Portal_Service {
     private function get_visible_task_stats_for_project( int $project_id, string $portal_type ): array {
         global $wpdb;
 
-        $where = 'WHERE project_id = %d';
-        $args  = array( $project_id );
+        $tasks_table = esc_sql( $wpdb->prefix . 'aosai_tasks' );
+        $args        = array( $project_id );
+        $sql         = "SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status IN ('done', 'completed') THEN 1 ELSE 0 END) as completed
+                FROM " . $tasks_table . ' WHERE project_id = %d';
 
         if ( 'client' === $portal_type ) {
-            $where .= ' AND is_private = 0';
+            $sql .= ' AND is_private = 0';
         }
 
         $stats = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status IN ('done', 'completed') THEN 1 ELSE 0 END) as completed
-                FROM {$wpdb->prefix}aosai_tasks
-                {$where}",
-                ...$args
-            ),
+            $wpdb->prepare( $sql, $args ),
             ARRAY_A
         );
 

@@ -242,8 +242,10 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
             return new \WP_Error( 'rest_invoice_missing_email', __( 'This invoice does not have a client email address.', 'agency-os-ai' ), array( 'status' => 400 ) );
         }
 
-        $subject = sprintf( __( 'Invoice %s from %s', 'agency-os-ai' ), $invoice['invoice_number'], get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) );
+        /* translators: 1: invoice number, 2: company name */
+        $subject = sprintf( __( 'Invoice %1$s from %2$s', 'agency-os-ai' ), $invoice['invoice_number'], get_option( 'aosai_company_name', get_bloginfo( 'name' ) ) );
         $body    = sprintf(
+            /* translators: 1: invoice number, 2: formatted total, 3: due date text, 4: invoice URL */
             __( "Hello,\n\nYour invoice %1\$s is ready.\nTotal: %2\$s\nDue date: %3\$s\n\nYou can review it here:\n%4\$s", 'agency-os-ai' ),
             $invoice['invoice_number'],
             wp_strip_all_tags( $this->format_invoice_total( $invoice ) ),
@@ -307,7 +309,10 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
 </head>
 <body>
     <h1><?php echo esc_html( $company ); ?></h1>
-    <h2><?php echo esc_html( sprintf( __( 'Invoice %s', 'agency-os-ai' ), $invoice['invoice_number'] ) ); ?></h2>
+    <h2><?php
+    /* translators: %s: invoice number */
+    echo esc_html( sprintf( __( 'Invoice %s', 'agency-os-ai' ), $invoice['invoice_number'] ) );
+    ?></h2>
     <div class="meta">
         <p><strong><?php esc_html_e( 'Client:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( $client ?: __( 'Unassigned client', 'agency-os-ai' ) ); ?></p>
         <p><strong><?php esc_html_e( 'Issue date:', 'agency-os-ai' ); ?></strong> <?php echo esc_html( (string) ( $invoice['issue_date'] ?? '' ) ); ?></p>
@@ -336,7 +341,10 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
     </table>
     <table class="summary">
         <tr><td><?php esc_html_e( 'Subtotal', 'agency-os-ai' ); ?></td><td><?php echo esc_html( $subtotal ); ?></td></tr>
-        <tr><td><?php echo esc_html( sprintf( __( 'Tax (%s%%)', 'agency-os-ai' ), (string) ( $invoice['tax_rate'] ?? 0 ) ) ); ?></td><td><?php echo esc_html( $tax ); ?></td></tr>
+        <tr><td><?php
+        /* translators: %s: invoice tax percentage */
+        echo esc_html( sprintf( __( 'Tax (%s%%)', 'agency-os-ai' ), (string) ( $invoice['tax_rate'] ?? 0 ) ) );
+        ?></td><td><?php echo esc_html( $tax ); ?></td></tr>
         <tr><td><?php esc_html_e( 'Total', 'agency-os-ai' ); ?></td><td><?php echo esc_html( $total ); ?></td></tr>
     </table>
     <?php if ( ! empty( $invoice['notes'] ) ) : ?>
@@ -449,9 +457,12 @@ class AOSAI_REST_Invoices extends WP_REST_Controller {
                 }
             }
 
-            $data['title'] = $client_name
-                ? sprintf( __( 'Invoice for %s', 'agency-os-ai' ), $client_name )
-                : __( 'Invoice', 'agency-os-ai' );
+            if ( '' !== $client_name ) {
+                /* translators: %s: client name */
+                $data['title'] = sprintf( __( 'Invoice for %s', 'agency-os-ai' ), $client_name );
+            } else {
+                $data['title'] = __( 'Invoice', 'agency-os-ai' );
+            }
         }
 
         return $data;

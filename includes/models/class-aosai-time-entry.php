@@ -10,7 +10,7 @@ class AOSAI_Time_Entry {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_time_entries';
+        return esc_sql( $wpdb->prefix . 'aosai_time_entries' );
     }
     
     public function get_all( array $args = array() ): array {
@@ -32,54 +32,52 @@ class AOSAI_Time_Entry {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        $where  = 'WHERE 1=1';
-        $params = array();
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array();
+        $sql      = 'SELECT * FROM ' . $table . ' WHERE 1=1';
         
         if ( ! empty( $args['user_id'] ) ) {
-            $where .= " AND user_id = %d";
+            $sql .= ' AND user_id = %d';
             $params[] = absint( $args['user_id'] );
         }
         
         if ( ! empty( $args['task_id'] ) ) {
-            $where .= " AND task_id = %d";
+            $sql .= ' AND task_id = %d';
             $params[] = absint( $args['task_id'] );
         }
         
         if ( ! empty( $args['project_id'] ) ) {
-            $where .= " AND project_id = %d";
+            $sql .= ' AND project_id = %d';
             $params[] = absint( $args['project_id'] );
         }
         
         if ( $args['billable'] !== '' ) {
-            $where .= " AND billable = %d";
+            $sql .= ' AND billable = %d';
             $params[] = (int) $args['billable'];
         }
         
         if ( $args['invoiced'] !== '' ) {
-            $where .= " AND invoiced = %d";
+            $sql .= ' AND invoiced = %d';
             $params[] = (int) $args['invoiced'];
         }
         
         if ( ! empty( $args['date_from'] ) ) {
-            $where .= " AND DATE(start_time) >= %s";
+            $sql .= ' AND DATE(start_time) >= %s';
             $params[] = sanitize_text_field( $args['date_from'] );
         }
         
         if ( ! empty( $args['date_to'] ) ) {
-            $where .= " AND DATE(start_time) <= %s";
+            $sql .= ' AND DATE(start_time) <= %s';
             $params[] = sanitize_text_field( $args['date_to'] );
         }
-        
-        $orderby = sanitize_sql_orderby( $args['orderby'] . ' ' . $args['order'] );
-        
-        $params[] = $args['per_page'];
+
+        $sql .= ' ORDER BY ' . $this->get_order_clause( (string) $args['orderby'], (string) $args['order'] );
+        $sql .= ' LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-        
-        $sql = $wpdb->prepare(
-            "SELECT * FROM {$table} {$where} ORDER BY {$orderby} LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
         
         $entries = $wpdb->get_results( $sql, ARRAY_A );
         
@@ -95,7 +93,7 @@ class AOSAI_Time_Entry {
         $table = $this->get_table();
         
         $entry = $wpdb->get_row(
-            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ),
+            $wpdb->prepare( 'SELECT * FROM ' . $table . ' WHERE id = %d', $id ),
             ARRAY_A
         );
         
@@ -257,7 +255,7 @@ class AOSAI_Time_Entry {
         
         $entry = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT * FROM {$table} WHERE user_id = %d AND end_time IS NULL ORDER BY start_time DESC LIMIT 1",
+                'SELECT * FROM ' . $table . ' WHERE user_id = %d AND end_time IS NULL ORDER BY start_time DESC LIMIT 1',
                 $user_id
             ),
             ARRAY_A
@@ -274,34 +272,31 @@ class AOSAI_Time_Entry {
             $user_id = get_current_user_id();
         }
         
-        $where = "WHERE user_id = %d";
         $params = array( $user_id );
-        
-        if ( ! empty( $args['date_from'] ) ) {
-            $where .= " AND DATE(start_time) >= %s";
-            $params[] = sanitize_text_field( $args['date_from'] );
-        }
-        
-        if ( ! empty( $args['date_to'] ) ) {
-            $where .= " AND DATE(start_time) <= %s";
-            $params[] = sanitize_text_field( $args['date_to'] );
-        }
-        
-        if ( ! empty( $args['project_id'] ) ) {
-            $where .= " AND project_id = %d";
-            $params[] = absint( $args['project_id'] );
-        }
-        
-        $totals = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT 
+        $sql    = 'SELECT 
                     COUNT(*) as total_entries,
                     SUM(duration) as total_duration,
                     SUM(CASE WHEN billable = 1 THEN duration ELSE 0 END) as billable_duration,
                     SUM(CASE WHEN invoiced = 1 THEN duration ELSE 0 END) as invoiced_duration
-                FROM {$table} {$where}",
-                ...$params
-            ),
+                FROM ' . $table . ' WHERE user_id = %d';
+        
+        if ( ! empty( $args['date_from'] ) ) {
+            $sql .= ' AND DATE(start_time) >= %s';
+            $params[] = sanitize_text_field( $args['date_from'] );
+        }
+        
+        if ( ! empty( $args['date_to'] ) ) {
+            $sql .= ' AND DATE(start_time) <= %s';
+            $params[] = sanitize_text_field( $args['date_to'] );
+        }
+        
+        if ( ! empty( $args['project_id'] ) ) {
+            $sql .= ' AND project_id = %d';
+            $params[] = absint( $args['project_id'] );
+        }
+
+        $totals = $wpdb->get_row(
+            $wpdb->prepare( $sql, $params ),
             ARRAY_A
         );
         
@@ -312,29 +307,26 @@ class AOSAI_Time_Entry {
         global $wpdb;
         $table = $this->get_table();
         
-        $where = "WHERE project_id = %d";
         $params = array( $project_id );
-        
-        if ( ! empty( $args['date_from'] ) ) {
-            $where .= " AND DATE(start_time) >= %s";
-            $params[] = sanitize_text_field( $args['date_from'] );
-        }
-        
-        if ( ! empty( $args['date_to'] ) ) {
-            $where .= " AND DATE(start_time) <= %s";
-            $params[] = sanitize_text_field( $args['date_to'] );
-        }
-        
-        $totals = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT 
+        $sql    = 'SELECT 
                     COUNT(*) as total_entries,
                     SUM(duration) as total_duration,
                     SUM(CASE WHEN billable = 1 THEN duration ELSE 0 END) as billable_duration,
                     SUM(CASE WHEN invoiced = 1 THEN duration ELSE 0 END) as invoiced_duration
-                FROM {$table} {$where}",
-                ...$params
-            ),
+                FROM ' . $table . ' WHERE project_id = %d';
+        
+        if ( ! empty( $args['date_from'] ) ) {
+            $sql .= ' AND DATE(start_time) >= %s';
+            $params[] = sanitize_text_field( $args['date_from'] );
+        }
+        
+        if ( ! empty( $args['date_to'] ) ) {
+            $sql .= ' AND DATE(start_time) <= %s';
+            $params[] = sanitize_text_field( $args['date_to'] );
+        }
+
+        $totals = $wpdb->get_row(
+            $wpdb->prepare( $sql, $params ),
             ARRAY_A
         );
         
@@ -351,12 +343,10 @@ class AOSAI_Time_Entry {
         
         $ids = array_map( 'absint', $entry_ids );
         $placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+        $sql = 'UPDATE ' . $table . ' SET invoiced = 1, invoice_id = %d WHERE id IN (' . $placeholders . ') AND invoiced = 0';
         
         $result = $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE {$table} SET invoiced = 1, invoice_id = %d WHERE id IN ({$placeholders}) AND invoiced = 0",
-                array_merge( array( $invoice_id ), $ids )
-            )
+            $wpdb->prepare( $sql, array_merge( array( $invoice_id ), $ids ) )
         );
         
         return $result !== false;
@@ -367,6 +357,21 @@ class AOSAI_Time_Entry {
         $end_ts = strtotime( $end );
         
         return max( 0, $end_ts - $start_ts );
+    }
+
+    private function get_order_clause( string $orderby, string $order ): string {
+        $allowed = array(
+            'start_time' => 'start_time',
+            'end_time'   => 'end_time',
+            'duration'   => 'duration',
+            'created_at' => 'created_at',
+            'updated_at' => 'updated_at',
+        );
+
+        $column    = $allowed[ sanitize_key( $orderby ) ] ?? 'start_time';
+        $direction = 'ASC' === strtoupper( $order ) ? 'ASC' : 'DESC';
+
+        return $column . ' ' . $direction;
     }
     
     private function enrich( array $entry ): array {

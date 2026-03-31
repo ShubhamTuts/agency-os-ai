@@ -10,26 +10,29 @@ class AOSAI_Ticket {
 
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_tickets';
+        return esc_sql( $wpdb->prefix . 'aosai_tickets' );
     }
 
     public function get( int $id ): ?array {
         global $wpdb;
 
-        $table = $this->get_table();
+        $table             = $this->get_table();
+        $departments_table = esc_sql( $wpdb->prefix . 'aosai_departments' );
+        $projects_table    = esc_sql( $wpdb->prefix . 'aosai_projects' );
+        $users_table       = esc_sql( $wpdb->users );
         $ticket = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT t.*, d.name AS department_name, d.color AS department_color,
+                'SELECT t.*, d.name AS department_name, d.color AS department_color,
                         p.title AS project_name,
                         requester.display_name AS requester_name,
                         requester.user_email AS requester_email,
                         assignee.display_name AS assignee_name
-                FROM {$table} t
-                LEFT JOIN {$wpdb->prefix}aosai_departments d ON t.department_id = d.id
-                LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
-                LEFT JOIN {$wpdb->users} requester ON t.requester_id = requester.ID
-                LEFT JOIN {$wpdb->users} assignee ON t.assignee_id = assignee.ID
-                WHERE t.id = %d",
+                FROM ' . $table . ' t
+                LEFT JOIN ' . $departments_table . ' d ON t.department_id = d.id
+                LEFT JOIN ' . $projects_table . ' p ON t.project_id = p.id
+                LEFT JOIN ' . $users_table . ' requester ON t.requester_id = requester.ID
+                LEFT JOIN ' . $users_table . ' assignee ON t.assignee_id = assignee.ID
+                WHERE t.id = %d',
                 $id
             ),
             ARRAY_A
@@ -54,60 +57,55 @@ class AOSAI_Ticket {
             )
         );
 
-        $offset = ( max( 1, (int) $args['page'] ) - 1 ) * max( 1, (int) $args['per_page'] );
-        $where  = array();
-        $params = array();
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array();
+        $sql      = 'SELECT t.*, d.name AS department_name, d.color AS department_color,
+                    p.title AS project_name,
+                    requester.display_name AS requester_name,
+                    requester.user_email AS requester_email,
+                    assignee.display_name AS assignee_name
+            FROM ' . $table . ' t
+            LEFT JOIN ' . esc_sql( $wpdb->prefix . 'aosai_departments' ) . ' d ON t.department_id = d.id
+            LEFT JOIN ' . esc_sql( $wpdb->prefix . 'aosai_projects' ) . ' p ON t.project_id = p.id
+            LEFT JOIN ' . $wpdb->users . ' requester ON t.requester_id = requester.ID
+            LEFT JOIN ' . $wpdb->users . ' assignee ON t.assignee_id = assignee.ID
+            WHERE 1=1';
 
-        if ( user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_tickets' ) ) {
-            $where[] = '1=1';
-        } else {
-            $where[] = '(t.requester_id = %d OR t.assignee_id = %d)';
+        if ( ! user_can( $user_id, 'manage_options' ) && ! user_can( $user_id, 'aosai_manage_tickets' ) ) {
+            $sql .= ' AND (t.requester_id = %d OR t.assignee_id = %d)';
             $params[] = $user_id;
             $params[] = $user_id;
         }
 
         if ( ! empty( $args['status'] ) ) {
-            $where[] = 't.status = %s';
+            $sql .= ' AND t.status = %s';
             $params[] = sanitize_key( (string) $args['status'] );
         }
 
         if ( ! empty( $args['project_id'] ) ) {
-            $where[] = 't.project_id = %d';
+            $sql .= ' AND t.project_id = %d';
             $params[] = absint( $args['project_id'] );
         }
 
         if ( ! empty( $args['department_id'] ) ) {
-            $where[] = 't.department_id = %d';
+            $sql .= ' AND t.department_id = %d';
             $params[] = absint( $args['department_id'] );
         }
 
         if ( ! empty( $args['search'] ) ) {
             $search = '%' . $wpdb->esc_like( sanitize_text_field( (string) $args['search'] ) ) . '%';
-            $where[] = '(t.subject LIKE %s OR t.content LIKE %s OR p.title LIKE %s)';
+            $sql .= ' AND (t.subject LIKE %s OR t.content LIKE %s OR p.title LIKE %s)';
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
         }
 
-        $params[] = max( 1, (int) $args['per_page'] );
+        $sql .= ' ORDER BY t.updated_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-
-        $sql = $wpdb->prepare(
-            "SELECT t.*, d.name AS department_name, d.color AS department_color,
-                    p.title AS project_name,
-                    requester.display_name AS requester_name,
-                    requester.user_email AS requester_email,
-                    assignee.display_name AS assignee_name
-            FROM {$table} t
-            LEFT JOIN {$wpdb->prefix}aosai_departments d ON t.department_id = d.id
-            LEFT JOIN {$wpdb->prefix}aosai_projects p ON t.project_id = p.id
-            LEFT JOIN {$wpdb->users} requester ON t.requester_id = requester.ID
-            LEFT JOIN {$wpdb->users} assignee ON t.assignee_id = assignee.ID
-            WHERE " . implode( ' AND ', $where ) . '
-            ORDER BY t.updated_at DESC
-            LIMIT %d OFFSET %d',
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
 
         $tickets = $wpdb->get_results( $sql, ARRAY_A ) ?: array();
         return array_map( array( $this, 'enrich' ), $tickets );
@@ -201,6 +199,7 @@ class AOSAI_Ticket {
                         'user_id'     => (int) $ticket['assignee_id'],
                         'project_id'  => (int) ( $ticket['project_id'] ?? 0 ),
                         'type'        => 'ticket_assigned',
+                        /* translators: %s: ticket subject */
                         'title'       => sprintf( esc_html__( 'New ticket assigned: %s', 'agency-os-ai' ), $ticket['subject'] ),
                         'content'     => wp_trim_words( (string) $ticket['content'], 18 ),
                         'object_type' => 'ticket',
@@ -261,14 +260,17 @@ class AOSAI_Ticket {
 
     public function get_notes( int $ticket_id ): array {
         global $wpdb;
+        $comments_table = esc_sql( $wpdb->prefix . 'aosai_comments' );
+        $users_table    = esc_sql( $wpdb->users );
 
         return $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT c.*, u.display_name AS author_name
-                FROM {$wpdb->prefix}aosai_comments c
-                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
-                WHERE c.commentable_type = 'ticket' AND c.commentable_id = %d
-                ORDER BY c.created_at ASC",
+                'SELECT c.*, u.display_name AS author_name
+                FROM ' . $comments_table . ' c
+                LEFT JOIN ' . $users_table . ' u ON c.created_by = u.ID
+                WHERE c.commentable_type = %s AND c.commentable_id = %d
+                ORDER BY c.created_at ASC',
+                'ticket',
                 $ticket_id
             ),
             ARRAY_A
@@ -277,6 +279,8 @@ class AOSAI_Ticket {
 
     public function add_note( int $ticket_id, string $content ): int|\WP_Error {
         global $wpdb;
+        $comments_table = esc_sql( $wpdb->prefix . 'aosai_comments' );
+        $users_table    = esc_sql( $wpdb->users );
 
         $content = wp_kses_post( $content );
         if ( '' === trim( wp_strip_all_tags( $content ) ) ) {
@@ -284,7 +288,7 @@ class AOSAI_Ticket {
         }
 
         $result = $wpdb->insert(
-            $wpdb->prefix . 'aosai_comments',
+            $comments_table,
             array(
                 'commentable_type' => 'ticket',
                 'commentable_id'   => $ticket_id,
@@ -301,10 +305,10 @@ class AOSAI_Ticket {
         $note_id = (int) $wpdb->insert_id;
         $note    = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT c.*, u.display_name AS author_name
-                FROM {$wpdb->prefix}aosai_comments c
-                LEFT JOIN {$wpdb->users} u ON c.created_by = u.ID
-                WHERE c.id = %d",
+                'SELECT c.*, u.display_name AS author_name
+                FROM ' . $comments_table . ' c
+                LEFT JOIN ' . $users_table . ' u ON c.created_by = u.ID
+                WHERE c.id = %d',
                 $note_id
             ),
             ARRAY_A
@@ -362,6 +366,7 @@ class AOSAI_Ticket {
 
         $assignee_name = $updated_ticket['assignee_name'] ?? __( 'Unassigned', 'agency-os-ai' );
         $message = (int) ( $updated_ticket['assignee_id'] ?? 0 ) > 0
+            /* translators: %s: assignee display name */
             ? sprintf( __( 'Assigned to %s.', 'agency-os-ai' ), $assignee_name )
             : __( 'Ticket was unassigned.', 'agency-os-ai' );
 
@@ -376,6 +381,7 @@ class AOSAI_Ticket {
         $department_name = $updated_ticket['department_name'] ?? __( 'General', 'agency-os-ai' );
         $this->insert_system_note(
             (int) $updated_ticket['id'],
+            /* translators: %s: department name */
             sprintf( __( 'Department updated to %s.', 'agency-os-ai' ), $department_name )
         );
     }
@@ -409,6 +415,7 @@ class AOSAI_Ticket {
                 'user_id'     => $new_assignee,
                 'project_id'  => (int) ( $updated_ticket['project_id'] ?? 0 ),
                 'type'        => 'ticket_assigned',
+                /* translators: %s: ticket subject */
                 'title'       => sprintf( esc_html__( 'Ticket assigned: %s', 'agency-os-ai' ), $updated_ticket['subject'] ),
                 'content'     => wp_trim_words( (string) $updated_ticket['content'], 18 ),
                 'object_type' => 'ticket',
@@ -421,6 +428,7 @@ class AOSAI_Ticket {
 
     private function insert_system_note( int $ticket_id, string $content ): void {
         global $wpdb;
+        $comments_table = esc_sql( $wpdb->prefix . 'aosai_comments' );
 
         $content = trim( wp_strip_all_tags( $content ) );
         if ( '' === $content ) {
@@ -428,7 +436,7 @@ class AOSAI_Ticket {
         }
 
         $wpdb->insert(
-            $wpdb->prefix . 'aosai_comments',
+            $comments_table,
             array(
                 'commentable_type' => 'ticket',
                 'commentable_id'   => $ticket_id,

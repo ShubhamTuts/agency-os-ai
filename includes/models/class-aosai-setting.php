@@ -64,6 +64,7 @@ class AOSAI_Setting {
             'workload_capacity_per_member' => 'aosai_workload_capacity_per_member',
             'portal_dashboard_layout' => 'aosai_portal_dashboard_layout',
             'login_tracking_enabled'  => 'aosai_login_tracking_enabled',
+            'role_access_matrix'      => 'aosai_role_access_matrix',
         );
 
         $this->defaults = array(
@@ -116,6 +117,7 @@ class AOSAI_Setting {
             'aosai_workload_capacity_per_member' => 8,
             'aosai_portal_dashboard_layout' => 'split',
             'aosai_login_tracking_enabled'  => 'yes',
+            'aosai_role_access_matrix'      => AOSAI_Activator::get_default_role_access_matrix(),
         );
     }
 
@@ -158,6 +160,11 @@ class AOSAI_Setting {
 
             if ( 'ticket_macro_library' === $frontend_key ) {
                 $settings[ $frontend_key ] = $this->normalize_macro_library( $value );
+                continue;
+            }
+
+            if ( 'role_access_matrix' === $frontend_key ) {
+                $settings[ $frontend_key ] = $this->normalize_role_access_matrix( $value );
                 continue;
             }
 
@@ -209,10 +216,16 @@ class AOSAI_Setting {
             return $this->normalize_macro_library( $value );
         }
 
+        if ( 'role_access_matrix' === $frontend_key ) {
+            return $this->normalize_role_access_matrix( $value );
+        }
+
         return $value;
     }
 
     public function update( array $data ): bool|\WP_Error {
+        $should_apply_role_access = false;
+
         foreach ( $data as $frontend_key => $value ) {
             if ( ! isset( $this->key_map[ $frontend_key ] ) ) {
                 continue;
@@ -226,6 +239,14 @@ class AOSAI_Setting {
             }
 
             update_option( $internal_key, $sanitized );
+
+            if ( 'role_access_matrix' === $frontend_key ) {
+                $should_apply_role_access = true;
+            }
+        }
+
+        if ( $should_apply_role_access ) {
+            AOSAI_Activator::apply_role_access_matrix( $this->normalize_role_access_matrix( get_option( 'aosai_role_access_matrix', array() ) ) );
         }
 
         return true;
@@ -401,6 +422,8 @@ class AOSAI_Setting {
                 return in_array( $value, $allowed, true ) ? $value : 'medium';
             case 'ticket_macro_library':
                 return $this->sanitize_macro_library( $value );
+            case 'role_access_matrix':
+                return $this->sanitize_role_access_matrix( $value );
             case 'portal_dashboard_layout':
                 $allowed = array( 'split', 'compact', 'stacked' );
                 $value   = sanitize_key( (string) $value );
@@ -489,6 +512,47 @@ class AOSAI_Setting {
         }
 
         return ! empty( $normalized ) ? $normalized : $this->get_default_macro_library();
+    }
+
+    private function sanitize_role_access_matrix( $value ): array {
+        $default_matrix = AOSAI_Activator::get_default_role_access_matrix();
+        $allowed_caps   = array_fill_keys( AOSAI_Activator::get_plugin_capabilities(), true );
+        $matrix         = is_array( $value ) ? $value : maybe_unserialize( $value );
+
+        if ( ! is_array( $matrix ) ) {
+            return $default_matrix;
+        }
+
+        $sanitized = array();
+        foreach ( $default_matrix as $role_name => $role_caps ) {
+            $input_caps = is_array( $matrix[ $role_name ] ?? null ) ? $matrix[ $role_name ] : array();
+            $sanitized[ $role_name ] = array();
+
+            foreach ( array_keys( $role_caps ) as $cap ) {
+                if ( ! isset( $allowed_caps[ $cap ] ) ) {
+                    continue;
+                }
+
+                $sanitized[ $role_name ][ $cap ] = rest_sanitize_boolean( $input_caps[ $cap ] ?? false );
+            }
+        }
+
+        return $sanitized;
+    }
+
+    private function normalize_role_access_matrix( $value ): array {
+        $default_matrix = AOSAI_Activator::get_default_role_access_matrix();
+        $matrix         = $this->sanitize_role_access_matrix( $value );
+
+        foreach ( $default_matrix as $role_name => $role_caps ) {
+            foreach ( array_keys( $role_caps ) as $cap ) {
+                if ( ! array_key_exists( $cap, $matrix[ $role_name ] ?? array() ) ) {
+                    $matrix[ $role_name ][ $cap ] = ! empty( $role_caps[ $cap ] );
+                }
+            }
+        }
+
+        return $matrix;
     }
 
     private function normalize_macro_definition( array $macro, int $index ): ?array {

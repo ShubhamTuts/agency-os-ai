@@ -109,13 +109,27 @@ class AOSAI_REST_Files extends WP_REST_Controller {
     
     public function upload_file( $request ) {
         $project_id = absint( $request->get_param( 'project_id' ) );
-        
-        if ( empty( $_FILES['file'] ) ) {
-            return new WP_Error( 'no_file', esc_html__( 'No file uploaded.', 'agency-os-ai' ), array( 'status' => 400 ) );
+
+        $nonce = $request->get_header( 'X-WP-Nonce' );
+        if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+            return new WP_Error( 'rest_invalid_nonce', esc_html__( 'Security check failed.', 'agency-os-ai' ), array( 'status' => 403 ) );
         }
         
+        if ( empty( $_FILES['file'] ) || ! is_array( $_FILES['file'] ) ) {
+            return new WP_Error( 'no_file', esc_html__( 'No file uploaded.', 'agency-os-ai' ), array( 'status' => 400 ) );
+        }
+
+        $file_input = wp_unslash( $_FILES['file'] );
+        $uploaded_file = array(
+            'name'     => sanitize_file_name( (string) ( $file_input['name'] ?? '' ) ),
+            'type'     => sanitize_mime_type( (string) ( $file_input['type'] ?? '' ) ),
+            'tmp_name' => isset( $file_input['tmp_name'] ) ? (string) $file_input['tmp_name'] : '',
+            'error'    => isset( $file_input['error'] ) ? (int) $file_input['error'] : UPLOAD_ERR_NO_FILE,
+            'size'     => isset( $file_input['size'] ) ? (int) $file_input['size'] : 0,
+        );
+        
         $file_service = AOSAI_File_Service::get_instance();
-        $upload_result = $file_service->handle_upload( $_FILES['file'], $project_id );
+        $upload_result = $file_service->handle_upload( $uploaded_file, $project_id );
         
         if ( is_wp_error( $upload_result ) ) {
             return $upload_result;

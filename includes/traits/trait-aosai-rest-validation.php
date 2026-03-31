@@ -17,6 +17,7 @@ trait AOSAI_REST_Validation {
             return new \WP_Error(
                 'missing_required_fields',
                 sprintf(
+                    /* translators: %s: comma-separated missing field names */
                     esc_html__( 'Missing required fields: %s', 'agency-os-ai' ),
                     implode( ', ', $missing )
                 ),

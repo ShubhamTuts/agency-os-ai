@@ -8,16 +8,19 @@ class AOSAI_Message {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_messages';
+        return esc_sql( $wpdb->prefix . 'aosai_messages' );
     }
     
     private function enrich( array $message ): array {
         $message['user_name'] = $message['author_name'] ?? '';
         
         if ( empty( $message['project_name'] ) && ! empty( $message['project_id'] ) ) {
-             global $wpdb;
-             $message['project_name'] = (string) $wpdb->get_var($wpdb->prepare("SELECT title FROM {$wpdb->prefix}aosai_projects WHERE id = %d", $message['project_id']));
-        } elseif (empty($message['project_id'])) {
+            global $wpdb;
+            $projects_table = esc_sql( $wpdb->prefix . 'aosai_projects' );
+            $message['project_name'] = (string) $wpdb->get_var(
+                $wpdb->prepare( 'SELECT title FROM ' . $projects_table . ' WHERE id = %d', $message['project_id'] )
+            );
+        } elseif ( empty( $message['project_id'] ) ) {
             $message['project_name'] = esc_html__( 'General', 'agency-os-ai' );
         }
         
@@ -28,8 +31,9 @@ class AOSAI_Message {
 
     public function get_messages_for_user( int $user_id, array $args = array() ): array {
         global $wpdb;
-        $table    = $this->get_table();
-        $pu_table = $wpdb->prefix . 'aosai_project_users';
+        $table       = $this->get_table();
+        $pu_table    = esc_sql( $wpdb->prefix . 'aosai_project_users' );
+        $users_table = esc_sql( $wpdb->users );
 
         $defaults = array(
             'page'     => 1,
@@ -37,34 +41,35 @@ class AOSAI_Message {
             'search'   => '',
         );
         $args   = wp_parse_args( $args, $defaults );
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
 
         $has_manager_access = user_can( $user_id, 'manage_options' ) || user_can( $user_id, 'aosai_manage_projects' );
-        $where  = $has_manager_access
-            ? 'WHERE 1=1'
-            : "WHERE ( m.project_id = 0 OR pu.user_id = %d ) AND ( m.is_private = 0 OR m.created_by = %d )";
-        $params = $has_manager_access ? array() : array( $user_id, $user_id );
+        $sql = 'SELECT DISTINCT m.*, u.display_name as author_name
+            FROM ' . $table . ' m
+            LEFT JOIN ' . $pu_table . ' pu ON m.project_id = pu.project_id
+            LEFT JOIN ' . $users_table . ' u ON m.created_by = u.ID
+            WHERE 1=1';
+        $params = array();
+
+        if ( ! $has_manager_access ) {
+            $sql .= ' AND ( m.project_id = 0 OR pu.user_id = %d ) AND ( m.is_private = 0 OR m.created_by = %d )';
+            $params[] = $user_id;
+            $params[] = $user_id;
+        }
 
         if ( ! empty( $args['search'] ) ) {
             $search   = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where   .= " AND (m.title LIKE %s OR m.content LIKE %s)";
+            $sql .= ' AND (m.title LIKE %s OR m.content LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
 
-        $params[] = $args['per_page'];
+        $sql .= ' ORDER BY m.created_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-
-        $sql = $wpdb->prepare(
-            "SELECT DISTINCT m.*, u.display_name as author_name
-            FROM {$table} m
-            LEFT JOIN {$pu_table} pu ON m.project_id = pu.project_id
-            LEFT JOIN {$wpdb->users} u ON m.created_by = u.ID
-            {$where}
-            ORDER BY m.created_at DESC
-            LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
 
         $messages = $wpdb->get_results( $sql, ARRAY_A );
         return array_map( array( $this, 'enrich' ), $messages );
@@ -72,7 +77,8 @@ class AOSAI_Message {
 
     public function get_project_messages( int $project_id, array $args = array() ): array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $defaults = array(
             'page'     => 1,
@@ -81,36 +87,32 @@ class AOSAI_Message {
         );
         $args = wp_parse_args( $args, $defaults );
 
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-
-        $where  = "WHERE m.project_id = %d";
-        $params = array( $project_id );
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array( $project_id );
+        $sql      = 'SELECT m.*, u.display_name as author_name
+            FROM ' . $table . ' m
+            LEFT JOIN ' . $users_table . ' u ON m.created_by = u.ID
+            WHERE m.project_id = %d';
 
         if ( ! current_user_can( 'manage_options' ) ) {
             $current_user_id  = get_current_user_id();
-            $where           .= " AND (m.is_private = 0 OR m.created_by = %d)";
+            $sql .= ' AND (m.is_private = 0 OR m.created_by = %d)';
             $params[]         = $current_user_id;
         }
 
         if ( ! empty( $args['search'] ) ) {
             $search   = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where   .= " AND (m.title LIKE %s OR m.content LIKE %s)";
+            $sql .= ' AND (m.title LIKE %s OR m.content LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
 
-        $params[] = $args['per_page'];
+        $sql .= ' ORDER BY m.created_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-
-        $sql = $wpdb->prepare(
-            "SELECT m.*, u.display_name as author_name
-            FROM {$table} m
-            LEFT JOIN {$wpdb->users} u ON m.created_by = u.ID
-            {$where}
-            ORDER BY m.created_at DESC
-            LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
 
         $messages = $wpdb->get_results( $sql, ARRAY_A );
         return array_map( array( $this, 'enrich' ), $messages );
@@ -118,14 +120,15 @@ class AOSAI_Message {
 
     public function get( int $id ): ?array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $message = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT m.*, u.display_name as author_name
-                FROM {$table} m
-                LEFT JOIN {$wpdb->users} u ON m.created_by = u.ID
-                WHERE m.id = %d",
+                'SELECT m.*, u.display_name as author_name
+                FROM ' . $table . ' m
+                LEFT JOIN ' . $users_table . ' u ON m.created_by = u.ID
+                WHERE m.id = %d',
                 $id
             ),
             ARRAY_A
@@ -216,7 +219,7 @@ class AOSAI_Message {
             return false;
         }
         
-        $comments_table = $wpdb->prefix . 'aosai_comments';
+        $comments_table = esc_sql( $wpdb->prefix . 'aosai_comments' );
         $wpdb->delete( $comments_table, array( 'commentable_type' => 'message', 'commentable_id' => $id ), array( '%s', '%d' ) );
         
         $result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );

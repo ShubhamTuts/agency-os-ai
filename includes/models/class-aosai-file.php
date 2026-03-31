@@ -8,12 +8,13 @@ class AOSAI_File {
     
     public function get_table(): string {
         global $wpdb;
-        return $wpdb->prefix . 'aosai_files';
+        return esc_sql( $wpdb->prefix . 'aosai_files' );
     }
     
     public function get_project_files( int $project_id, array $args = array() ): array {
         global $wpdb;
-        $table = $this->get_table();
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
         
         $defaults = array(
             'page'     => 1,
@@ -23,40 +24,36 @@ class AOSAI_File {
         );
         $args = wp_parse_args( $args, $defaults );
         
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
-        
-        $where = "WHERE project_id = %d";
-        $params = array( $project_id );
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $params   = array( $project_id );
+        $sql      = 'SELECT f.*, u.display_name as uploader_name, p.title as project_title
+            FROM ' . $table . ' f 
+            INNER JOIN ' . esc_sql( $wpdb->prefix . 'aosai_projects' ) . ' p ON f.project_id = p.id
+            LEFT JOIN ' . $users_table . ' u ON f.uploaded_by = u.ID 
+            WHERE project_id = %d';
         
         if ( ! current_user_can( 'manage_options' ) ) {
-            $where .= " AND is_private = 0";
+            $sql .= ' AND is_private = 0';
         }
         
         if ( ! empty( $args['folder'] ) ) {
-            $where .= " AND folder = %s";
+            $sql .= ' AND folder = %s';
             $params[] = sanitize_text_field( $args['folder'] );
         }
         
         if ( ! empty( $args['search'] ) ) {
             $search = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where .= " AND (file_name LIKE %s OR title LIKE %s)";
+            $sql .= ' AND (file_name LIKE %s OR title LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
-        
-        $params[] = $args['per_page'];
-        $params[] = $offset;
 
-        $sql = $wpdb->prepare(
-            "SELECT f.*, u.display_name as uploader_name, p.title as project_title
-            FROM {$table} f 
-            INNER JOIN {$wpdb->prefix}aosai_projects p ON f.project_id = p.id
-            LEFT JOIN {$wpdb->users} u ON f.uploaded_by = u.ID 
-            {$where} 
-            ORDER BY f.created_at DESC 
-            LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql .= ' ORDER BY f.created_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
+        $params[] = $offset;
+        $sql = $wpdb->prepare( $sql, $params );
 
         $files = $wpdb->get_results( $sql, ARRAY_A );
         return array_map( array( $this, 'normalize_file' ), $files );
@@ -64,8 +61,8 @@ class AOSAI_File {
 
     public function get_user_files( int $user_id, array $args = array() ): array {
         global $wpdb;
-        $table    = $this->get_table();
-        $pu_table = $wpdb->prefix . 'aosai_project_users';
+        $table       = $this->get_table();
+        $users_table = esc_sql( $wpdb->users );
 
         $defaults = array(
             'page'     => 1,
@@ -73,35 +70,36 @@ class AOSAI_File {
             'search'   => '',
         );
         $args   = wp_parse_args( $args, $defaults );
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
+        $per_page = max( 1, (int) $args['per_page'] );
+        $page     = max( 1, (int) $args['page'] );
+        $offset   = ( $page - 1 ) * $per_page;
+        $pu_table = esc_sql( $wpdb->prefix . 'aosai_project_users' );
 
-        $where  = user_can( $user_id, 'manage_options' )
-            ? 'WHERE 1=1'
-            : "WHERE pu.user_id = %d AND (f.is_private = 0 OR f.uploaded_by = %d)";
-        $params = user_can( $user_id, 'manage_options' ) ? array() : array( $user_id, $user_id );
+        $sql = 'SELECT f.*, u.display_name as uploader_name, p.title as project_title
+            FROM ' . $table . ' f
+            INNER JOIN ' . esc_sql( $wpdb->prefix . 'aosai_projects' ) . ' p ON f.project_id = p.id
+            LEFT JOIN ' . $users_table . ' u ON f.uploaded_by = u.ID
+            LEFT JOIN ' . $pu_table . ' pu ON f.project_id = pu.project_id
+            WHERE 1=1';
+        $params = array();
+
+        if ( ! user_can( $user_id, 'manage_options' ) ) {
+            $sql .= ' AND pu.user_id = %d AND (f.is_private = 0 OR f.uploaded_by = %d)';
+            $params[] = $user_id;
+            $params[] = $user_id;
+        }
 
         if ( ! empty( $args['search'] ) ) {
             $search   = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
-            $where   .= " AND (f.file_name LIKE %s OR f.title LIKE %s)";
+            $sql .= ' AND (f.file_name LIKE %s OR f.title LIKE %s)';
             $params[] = $search;
             $params[] = $search;
         }
 
-        $params[] = $args['per_page'];
+        $sql .= ' GROUP BY f.id ORDER BY f.created_at DESC LIMIT %d OFFSET %d';
+        $params[] = $per_page;
         $params[] = $offset;
-
-        $sql = $wpdb->prepare(
-            "SELECT f.*, u.display_name as uploader_name, p.title as project_title
-            FROM {$table} f
-            INNER JOIN {$wpdb->prefix}aosai_projects p ON f.project_id = p.id
-            LEFT JOIN {$wpdb->users} u ON f.uploaded_by = u.ID
-            LEFT JOIN {$pu_table} pu ON f.project_id = pu.project_id
-            {$where}
-            GROUP BY f.id
-            ORDER BY f.created_at DESC
-            LIMIT %d OFFSET %d",
-            ...$params
-        );
+        $sql = $wpdb->prepare( $sql, $params );
 
         $files = $wpdb->get_results( $sql, ARRAY_A );
         return array_map( array( $this, 'normalize_file' ), $files );
@@ -109,15 +107,17 @@ class AOSAI_File {
     
     public function get( int $id ): ?array {
         global $wpdb;
-        $table = $this->get_table();
+        $table          = $this->get_table();
+        $projects_table = esc_sql( $wpdb->prefix . 'aosai_projects' );
+        $users_table    = esc_sql( $wpdb->users );
         
         $file = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT f.*, u.display_name as uploader_name, p.title as project_title
-                FROM {$table} f 
-                INNER JOIN {$wpdb->prefix}aosai_projects p ON f.project_id = p.id
-                LEFT JOIN {$wpdb->users} u ON f.uploaded_by = u.ID 
-                WHERE f.id = %d",
+                'SELECT f.*, u.display_name as uploader_name, p.title as project_title
+                FROM ' . $table . ' f
+                INNER JOIN ' . $projects_table . ' p ON f.project_id = p.id
+                LEFT JOIN ' . $users_table . ' u ON f.uploaded_by = u.ID
+                WHERE f.id = %d',
                 $id
             ),
             ARRAY_A
