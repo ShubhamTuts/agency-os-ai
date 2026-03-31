@@ -119,7 +119,7 @@ trait AOSAI_REST_Validation {
         return $sanitized;
     }
     
-    protected function sanitize_date( $date ): ?string {
+    public function sanitize_date( $date ): ?string {
         if ( empty( $date ) ) {
             return null;
         }
