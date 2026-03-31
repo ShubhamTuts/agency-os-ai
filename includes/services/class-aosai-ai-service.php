@@ -51,7 +51,10 @@ class AOSAI_AI_Service {
         if ( $this->is_rate_limited( $user_id ) ) {
             return new \WP_Error( 'rate_limited', esc_html__( 'You have exceeded the AI request limit. Please try again later.', 'agency-os-ai' ) );
         }
-        
+
+        // Always send a concrete model to avoid upstream API errors.
+        $params['model'] = $this->resolve_model_for_provider( $provider, (string) ( $params['model'] ?? '' ) );
+
         $result = $provider->generate_tasks( $params );
         $this->log_usage( $user_id, $provider, $params, $result );
         
@@ -96,9 +99,13 @@ class AOSAI_AI_Service {
             return new \WP_Error( 'rate_limited', esc_html__( 'You have exceeded the AI request limit. Please try again later.', 'agency-os-ai' ) );
         }
 
+        // Always send a concrete model to avoid upstream API errors.
+        $params['model'] = $this->resolve_model_for_provider( $provider, (string) ( $params['model'] ?? '' ) );
+
         $result = $provider->chat( $messages, $params );
 
         if ( $user_id > 0 ) {
+            $model = $this->resolve_model_name( (string) ( $params['model'] ?? '' ), $provider );
             $this->log_usage(
                 $user_id,
                 $provider,
@@ -106,7 +113,7 @@ class AOSAI_AI_Service {
                     $params,
                     array(
                         'action' => sanitize_key( $params['action'] ?? 'chat' ),
-                        'model'  => sanitize_text_field( $params['model'] ?? $provider->get_default_model() ),
+                        'model'  => $model,
                     )
                 ),
                 $result
@@ -142,7 +149,7 @@ class AOSAI_AI_Service {
                 'user_id'           => $user_id,
                 'project_id'        => absint( $params['project_id'] ?? 0 ) ?: null,
                 'provider'          => $provider->get_id(),
-                'model'            => sanitize_text_field( $params['model'] ?? $provider->get_default_model() ),
+                'model'             => $this->resolve_model_name( (string) ( $params['model'] ?? '' ), $provider ),
                 'action'           => sanitize_key( $params['action'] ?? 'generate_tasks' ),
                 'prompt_tokens'    => absint( $usage['prompt_tokens'] ?? 0 ),
                 'completion_tokens'=> absint( $usage['completion_tokens'] ?? 0 ),
@@ -152,5 +159,19 @@ class AOSAI_AI_Service {
             ),
             array( '%d', '%d', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s' )
         );
+    }
+
+    private function resolve_model_for_provider( AOSAI_AI_Provider_Interface $provider, string $model ): string {
+        return $this->resolve_model_name( $model, $provider );
+    }
+
+    private function resolve_model_name( string $model, AOSAI_AI_Provider_Interface $provider ): string {
+        $model = sanitize_text_field( $model );
+        if ( '' !== trim( $model ) ) {
+            return $model;
+        }
+
+        $fallback = sanitize_text_field( $provider->get_default_model() );
+        return '' !== trim( $fallback ) ? $fallback : 'gpt-4o-mini';
     }
 }

@@ -80,7 +80,7 @@ class AOSAI_REST_Settings extends WP_REST_Controller {
         $data     = $request->get_json_params();
         $provider = sanitize_key( $data['provider'] ?? '' );
         $api_key  = sanitize_text_field( $data['api_key'] ?? '' );
-        $model    = sanitize_key( $data['model'] ?? '' );
+        $model    = sanitize_text_field( $data['model'] ?? '' );
 
         $result = AOSAI_Setting::get_instance()->test_ai_connection( $provider, $api_key, $model );
 

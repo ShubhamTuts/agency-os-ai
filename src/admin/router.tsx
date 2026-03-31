@@ -11,6 +11,9 @@ import Team from './pages/Team';
 import Settings from './pages/Settings';
 import AiPlayground from './pages/AiPlayground';
 import Profile from './pages/Profile';
+import Clients from './pages/Clients';
+import Invoices from './pages/Invoices';
+import TimeTracking from './pages/TimeTracking';
 
 function ProRoute({ children }: { children: React.ReactNode }) {
     const isPro = (window as any).aosaiData?.isPro;
@@ -54,6 +57,9 @@ export function AppRouter() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/ai" element={<AiPlayground />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/clients" element={<ProRoute><Clients /></ProRoute>} />
+            <Route path="/invoices" element={<ProRoute><Invoices /></ProRoute>} />
+            <Route path="/time-tracking" element={<ProRoute><TimeTracking /></ProRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );

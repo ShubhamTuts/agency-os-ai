@@ -34,14 +34,16 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
     }
     
     public function get_default_model(): string {
-        return get_option( 'aosai_openai_model', 'gpt-4o-mini' );
+        $model = sanitize_text_field( (string) get_option( 'aosai_openai_model', '' ) );
+        return '' !== trim( $model ) ? $model : 'gpt-4o-mini';
     }
     
     public function generate_tasks( array $params ): array|\WP_Error {
         $prompt = $this->build_task_generation_prompt( $params );
+        $model  = $this->resolve_model( (string) ( $params['model'] ?? '' ) );
         
         $response = $this->make_request( array(
-            'model'    => sanitize_text_field( $params['model'] ?? $this->get_default_model() ),
+            'model'    => $model,
             'messages' => array(
                 array(
                     'role'    => 'system',
@@ -71,7 +73,7 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
         $sanitized = $this->sanitize_task_output( $parsed );
         $sanitized['usage'] = $response['usage'] ?? array();
         $sanitized['provider'] = $this->get_id();
-        $sanitized['model'] = sanitize_text_field( $params['model'] ?? $this->get_default_model() );
+        $sanitized['model'] = $model;
         
         return $sanitized;
     }
@@ -105,6 +107,8 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
     }
     
     public function chat( array $messages, array $params = array() ): array|\WP_Error {
+        $model = $this->resolve_model( (string) ( $params['model'] ?? '' ) );
+
         $sanitized_messages = array_map( function( $msg ) {
             return array(
                 'role'    => in_array( $msg['role'], array( 'user', 'assistant', 'system' ), true ) ? $msg['role'] : 'user',
@@ -118,7 +122,7 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
         ) );
         
         $response = $this->make_request( array(
-            'model'    => sanitize_text_field( $params['model'] ?? $this->get_default_model() ),
+            'model'    => $model,
             'messages' => $sanitized_messages,
             'temperature' => 0.7,
             'max_tokens'  => 2000,
@@ -138,6 +142,11 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
         $api_key = get_option( 'aosai_openai_api_key', '' );
         if ( empty( $api_key ) ) {
             return new \WP_Error( 'no_api_key', esc_html__( 'OpenAI API key is not configured.', 'agency-os-ai' ) );
+        }
+
+        // Keep payload valid even when upstream callers pass an empty model.
+        if ( ! isset( $body['model'] ) || '' === trim( (string) $body['model'] ) ) {
+            $body['model'] = $this->get_default_model();
         }
         
         $response = wp_remote_post( self::API_URL, array(
@@ -169,6 +178,11 @@ class AOSAI_AI_OpenAI implements AOSAI_AI_Provider_Interface {
         }
         
         return $body;
+    }
+
+    private function resolve_model( string $model ): string {
+        $model = sanitize_text_field( $model );
+        return '' !== trim( $model ) ? $model : $this->get_default_model();
     }
     
     private function build_task_generation_prompt( array $params ): string {

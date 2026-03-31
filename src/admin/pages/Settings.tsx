@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { apiDelete, apiGet, apiPost, apiPut } from '../services/api';
-import { Bot, Building2, CheckCircle, Globe, Key, Link2, Mail, PanelsTopLeft, Save, Server, ShieldCheck, Sparkles, Trash2, Wand2, Workflow } from 'lucide-react';
+import { Bot, Building2, CheckCircle, Globe, Key, Link2, Mail, PanelsTopLeft, RefreshCw, Save, Server, ShieldCheck, Sparkles, Trash2, Wand2, Workflow } from 'lucide-react';
 
 interface ShortcodeRef {
     label: string;
@@ -19,6 +19,19 @@ interface WebhookItem {
     is_active: number;
     trigger_count?: number;
     last_triggered_at?: string | null;
+}
+
+interface LoginActivityItem {
+    id: number;
+    user_id: number;
+    user_login: string;
+    user_name?: string;
+    email?: string;
+    portal_type: string;
+    event_type: string;
+    ip_address: string;
+    user_agent?: string;
+    created_at: string;
 }
 
 interface SettingsState {
@@ -64,6 +77,7 @@ interface SettingsState {
     ticket_ai_routing: boolean;
     ticket_default_priority: string;
     portal_dashboard_layout: string;
+    login_tracking_enabled: boolean;
     portal_page_url?: string;
     portal_login_page_url?: string;
     portal_ticket_page_url?: string;
@@ -81,7 +95,7 @@ const DEFAULTS: SettingsState = {
     portal_name: '', portal_welcome_title: '', portal_welcome_text: '', portal_secondary_color: '#f59e0b',
     portal_page_id: 0, portal_login_page_id: 0, portal_ticket_page_id: 0,
     hide_admin_bar: true, force_frontend_dashboard: true, enable_pwa: true, show_footer_credit: false, footer_credit_text: '', ticket_ai_routing: true,
-    ticket_default_priority: 'medium', portal_dashboard_layout: 'split', shortcodes: [],
+    ticket_default_priority: 'medium', portal_dashboard_layout: 'split', login_tracking_enabled: true, shortcodes: [],
 };
 
 export default function Settings() {
@@ -100,6 +114,8 @@ export default function Settings() {
     const [smtpResult, setSmtpResult] = useState<{ success: boolean; message: string } | null>(null);
     const [webhookResult, setWebhookResult] = useState<{ success: boolean; message: string } | null>(null);
     const [webhookForm, setWebhookForm] = useState({ name: '', url: '', events: 'all' });
+    const [loginActivity, setLoginActivity] = useState<LoginActivityItem[]>([]);
+    const [loginActivityLoading, setLoginActivityLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'company' | 'portal' | 'ai' | 'email' | 'automation'>('company');
 
     useEffect(() => {
@@ -111,6 +127,7 @@ export default function Settings() {
     useEffect(() => {
         if (activeTab !== 'automation') return;
         loadWebhooks();
+        loadLoginActivity();
     }, [activeTab]);
 
     async function handleSave(e: React.FormEvent) {
@@ -244,6 +261,18 @@ export default function Settings() {
             setWebhookResult({ success: false, message: err.message || 'Unable to delete webhook.' });
         } finally {
             setWebhookActionId(null);
+        }
+    }
+
+    async function loadLoginActivity() {
+        setLoginActivityLoading(true);
+        try {
+            const result = await apiGet<{ data: LoginActivityItem[] }>('/aosai/v1/portal/login-activity', { per_page: 12 });
+            setLoginActivity(Array.isArray(result?.data) ? result.data : []);
+        } catch {
+            setLoginActivity([]);
+        } finally {
+            setLoginActivityLoading(false);
         }
     }
 
@@ -542,6 +571,14 @@ export default function Settings() {
                             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Inbound Email Setup</h2>
                                 <div className="mt-5 space-y-4">
+                                    <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm">
+                                        <span>Track login events and client/employee IPs</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.login_tracking_enabled}
+                                            onChange={(e) => setSettings((prev) => ({ ...prev, login_tracking_enabled: e.target.checked }))}
+                                        />
+                                    </label>
                                     <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Secure token</p>
                                         <p className="mt-2 break-all text-sm font-medium text-gray-900">{settings.inbound_email_token}</p>
@@ -573,6 +610,34 @@ export default function Settings() {
                                                 <span key={event} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">{event}</span>
                                             ))}
                                         </div>
+                                    </div>
+                                    <div className="rounded-2xl border border-gray-200 p-4 text-sm text-gray-600">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <p className="font-medium text-gray-900">Recent login activity</p>
+                                            <button
+                                                type="button"
+                                                onClick={loadLoginActivity}
+                                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                            >
+                                                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                                            </button>
+                                        </div>
+                                        {loginActivityLoading ? (
+                                            <p className="mt-3 text-xs text-gray-500">Loading recent login activity...</p>
+                                        ) : loginActivity.length === 0 ? (
+                                            <p className="mt-3 text-xs text-gray-500">No login activity recorded yet.</p>
+                                        ) : (
+                                            <div className="mt-3 space-y-2">
+                                                {loginActivity.map((item) => (
+                                                    <div key={item.id} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+                                                        <p className="font-medium text-gray-900">{item.user_name || item.user_login || 'Unknown user'} ({item.portal_type || 'team'})</p>
+                                                        <p className="mt-1 text-gray-500">
+                                                            {item.event_type.replace(/_/g, ' ')} | IP {item.ip_address || 'N/A'} | {item.created_at ? new Date(item.created_at).toLocaleString() : 'Unknown time'}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </section>
