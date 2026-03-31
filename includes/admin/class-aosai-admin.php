@@ -24,10 +24,11 @@ class AOSAI_Admin {
 
         $entry = aosai_get_asset_entry( 'src/admin/index.tsx' );
         $version = AOSAI_VERSION;
-        // No WP React deps — our Vite bundle is self-contained with React 18 bundled
-        // inline. Loading wp-element / react / react-dom alongside the bundle creates
-        // two React instances on the same page, causing reconciler DOM conflicts.
-        $deps = array();
+        // Use WordPress's own React handles as deps (react + react-dom).
+        // Our Vite bundle externalizes React so it uses window.React / window.ReactDOM
+        // at runtime. This ensures a single shared React instance even when other
+        // plugins (Elementor, Gutenberg blocks, etc.) also load wp-element on the page.
+        $deps = array( 'react', 'react-dom' );
 
         if ( $entry ) {
             wp_enqueue_script(
